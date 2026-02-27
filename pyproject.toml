@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["backend*", "frontend*"]
+
+[project]
+name = "icberg"
+version = "0.1.0"
+description = "Titanic Dataset Conversational Analysis Agent"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+
+dependencies = [
+    # Core Framework
+    "fastapi>=0.133.0",
+    "uvicorn[standard]>=0.34.0",
+    "pydantic>=2.12.0",
+    "python-dotenv>=1.0.0",
+
+    # Agent
+    "langgraph>=1.0.0",
+    "langgraph-prebuilt>=1.0.0",
+
+    # LLM Providers (LangChain integrations)
+    "langchain-cerebras>=0.8.0",
+    "langchain-groq>=1.1.0",
+    "langchain-google-genai>=4.2.0",
+
+    # Embeddings (direct SDK)
+    "google-genai>=1.65.0",
+
+    # Vector DB
+    "qdrant-client>=1.17.0",
+
+    # Database
+    "sqlalchemy>=2.0.40",
+
+    # Logging
+    "structlog>=25.5.0",
+
+    # Data Science
+    "pandas>=2.2.0",
+    "matplotlib>=3.9.0",
+    "seaborn>=0.13.0",
+    "numpy>=1.26.0",
+
+    # Frontend (separate process, but same venv for simplicity)
+    "streamlit>=1.54.0",
+    "requests>=2.32.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+uv.lock
+*.sqlite
+.pytest_cache/
+.coverage
+*.log
+.devdocs/
+*.egg-info/
+icberg.egg-info/
