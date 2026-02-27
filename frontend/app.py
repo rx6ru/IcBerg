@@ -9,7 +9,9 @@ All business logic lives in the FastAPI backend. This file handles:
 """
 
 import base64
+import json
 import os
+import time
 from uuid import uuid4
 
 import requests
@@ -18,6 +20,7 @@ import streamlit as st
 # Config
 API_URL = os.environ.get("API_URL", "http://localhost:8000")
 CHAT_ENDPOINT = f"{API_URL}/chat"
+CHAT_STREAM_ENDPOINT = f"{API_URL}/chat/stream"
 HISTORY_ENDPOINT = f"{API_URL}/history"
 HEALTH_ENDPOINT = f"{API_URL}/health"
 
@@ -104,7 +107,7 @@ def render_message(msg: dict):
 
 
 def send_message(user_input: str):
-    """POST the user message to the backend and handle the response."""
+    """POST the user message to the streaming backend and handle the response."""
     # Append user message immediately
     st.session_state.messages.append({
         "role": "user",
@@ -116,63 +119,98 @@ def send_message(user_input: str):
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # Send to backend with loading indicator
+    # Send to backend with live SSE parsing
     with st.chat_message("assistant"):
-        with st.spinner("🧊 Analyzing..."):
+        with st.status("🧊 Analyzing...", expanded=True) as status:
             try:
+                start_time = time.monotonic()
                 resp = requests.post(
-                    CHAT_ENDPOINT,
+                    CHAT_STREAM_ENDPOINT,
                     json={
                         "session_id": st.session_state.session_id,
                         "message": user_input,
                     },
                     timeout=60,
+                    stream=True
                 )
 
                 if resp.status_code == 200:
-                    data = resp.json()
-                    text = data.get("text", "No response received.")
-                    image = data.get("image_base64")
-                    cached = data.get("cached", False)
-                    latency = data.get("latency_ms", 0)
-                    tools = data.get("tools_called", [])
+                    final_text = "No response received."
+                    image_base64 = None
+                    tools_used = []
 
-                    # Render response
-                    st.markdown(text)
+                    for line in resp.iter_lines():
+                        if not line:
+                            continue
+                        
+                        decoded_line = line.decode('utf-8')
+                        if decoded_line.startswith("data: "):
+                            raw_data = decoded_line[6:]
+                            try:
+                                data = json.loads(raw_data)
+                            except json.JSONDecodeError:
+                                continue
+                                
+                            event_type = data.get("type")
+                            
+                            if event_type == "start":
+                                status.update(label=data.get("content", "Analyzing..."))
+                            elif event_type == "tool_start":
+                                name = data.get('name', 'unknown')
+                                tools_used.append(name)
+                                status.write(f"⚙️ Running tool: **{name}**")
+                            elif event_type == "tool_end":
+                                status.write(f"✅ Finished: **{data.get('name')}**")
+                            elif event_type == "final_text":
+                                final_text = data.get("content", "")
+                            elif event_type == "image":
+                                image_base64 = data.get("content")
+                            elif event_type == "error":
+                                status.update(label="Server Error", state="error")
+                                final_text = data.get("content", "Service temporarily unavailable.")
 
-                    if image:
+                    # Calculate latency
+                    latency_ms = int((time.monotonic() - start_time) * 1000)
+                    
+                    # Update status header text to act as metadata footer
+                    status.update(
+                        label=f"⏱️ {latency_ms}ms · 🔧 {', '.join(tools_used) if tools_used else 'No tools'}", 
+                        state="complete", 
+                        expanded=False
+                    )
+
+                    # Render response outside the status box
+                    st.markdown(final_text)
+
+                    if image_base64:
                         try:
-                            image_bytes = base64.b64decode(image)
-                            st.image(image_bytes, caption="Generated Chart",
-                                     use_container_width=True)
+                            image_bytes = base64.b64decode(image_base64)
+                            st.image(image_bytes, caption="Generated Chart", use_container_width=True)
                         except Exception:
                             st.warning("⚠️ Could not decode chart image.")
-
-                    # Metadata footer
-                    meta_parts = [f"⏱️ {latency}ms"]
-                    if cached:
-                        meta_parts.append("📦 cached")
-                    if tools:
-                        meta_parts.append(f"🔧 {', '.join(tools)}")
-                    st.caption(" · ".join(meta_parts))
 
                     # Save to session
                     st.session_state.messages.append({
                         "role": "assistant",
-                        "content": text,
-                        "image": image,
+                        "content": final_text,
+                        "image": image_base64,
                     })
 
                 elif resp.status_code == 422:
+                    status.update(label="Validation Error", state="error")
                     st.error("❌ Invalid request. Please check your message.")
                 else:
+                    status.update(label="Server Error", state="error")
                     st.error(f"❌ Server error ({resp.status_code}). Please try again.")
 
             except requests.Timeout:
+                status.update(label="Timeout", state="error")
                 st.error("⏰ Request timed out. The server may be overloaded.")
             except requests.ConnectionError:
+                status.update(label="Connection Error", state="error")
                 st.error("🔌 Cannot connect to the backend. Is the API server running?")
             except requests.RequestException as e:
+                status.update(label="Request Failed", state="error")
                 st.error(f"❌ Request failed: {e}")
 
 
