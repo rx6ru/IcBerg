@@ -41,6 +41,9 @@ def chat(request: ChatRequest, req: Request):
     qdrant = req.app.state.qdrant
     schema_info = req.app.state.schema_info
 
+    if agent is None:
+        raise HTTPException(status_code=503, detail="Agent not available. Configure LLM API keys in .env and restart.")
+
     # Step 1: Embed the message
     embedding = None
     try:

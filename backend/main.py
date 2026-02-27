@@ -45,9 +45,15 @@ async def lifespan(app: FastAPI):
     app.state.llm_adapter = llm_adapter
     logger.info("startup.llm_initialized", healthy=llm_adapter.is_healthy())
 
-    # 4. Create the LangGraph agent
-    agent = create_agent(llm_adapter, df)
-    app.state.agent = agent
+    # 4. Create the LangGraph agent (may fail if no LLM keys configured)
+    try:
+        agent = create_agent(llm_adapter, df)
+        app.state.agent = agent
+        logger.info("startup.agent_created")
+    except Exception as e:
+        app.state.agent = None
+        logger.error("startup.agent_failed", error=str(e),
+                     hint="Set CEREBRAS_API_KEY or GROQ_API_KEY in .env")
 
     # 5. Initialize SQLite database
     init_db()

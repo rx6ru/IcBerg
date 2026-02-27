@@ -40,33 +40,53 @@ class LLMAdapter:
         self.max_tokens = int(os.environ.get("LLM_MAX_TOKENS", "2048"))
         self.timeout = int(os.environ.get("LLM_TIMEOUT", "30"))
 
-        self.primary_llm = ChatCerebras(
-            api_key=self.cerebras_key,
-            model=self.cerebras_model_name,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            timeout=self.timeout,
-        )
+        self.primary_llm = None
+        self.fallback_llm = None
 
-        self.fallback_llm = ChatGroq(
-            api_key=self.groq_key,
-            model=self.groq_model_name,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            timeout=self.timeout,
-        )
+        if self.cerebras_key:
+            try:
+                self.primary_llm = ChatCerebras(
+                    api_key=self.cerebras_key,
+                    model=self.cerebras_model_name,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                    timeout=self.timeout,
+                )
+            except Exception as e:
+                logger.error("llm.cerebras_init_failed", error=str(e))
+        else:
+            logger.warning("llm.no_cerebras_key")
+
+        if self.groq_key:
+            try:
+                self.fallback_llm = ChatGroq(
+                    api_key=self.groq_key,
+                    model=self.groq_model_name,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                    timeout=self.timeout,
+                )
+            except Exception as e:
+                logger.error("llm.groq_init_failed", error=str(e))
+        else:
+            logger.warning("llm.no_groq_key")
 
     def get_chat_model(self) -> BaseChatModel:
-        """Return the primary model with automatic Groq fallback.
-
-        Uses LangChain's native `.with_fallbacks()` so LangGraph's
-        internal `.invoke()` calls transparently retry on Groq when
-        Cerebras returns 5xx, 429, or times out.
+        """Return the best available model, with fallback if both keys exist.
 
         Returns:
-            A RunnableWithFallbacks wrapping Cerebras → Groq.
+            A BaseChatModel (or RunnableWithFallbacks if both providers available).
+
+        Raises:
+            LLMUnavailableError: If no API keys are configured.
         """
-        return self.primary_llm.with_fallbacks([self.fallback_llm])
+        if self.primary_llm and self.fallback_llm:
+            return self.primary_llm.with_fallbacks([self.fallback_llm])
+        if self.primary_llm:
+            return self.primary_llm
+        if self.fallback_llm:
+            return self.fallback_llm
+        raise LLMUnavailableError("No LLM API keys configured. Set CEREBRAS_API_KEY or GROQ_API_KEY.")
 
     def is_healthy(self) -> bool:
         """Check if at least one provider has a key configured.
