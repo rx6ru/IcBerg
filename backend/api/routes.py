@@ -1,8 +1,8 @@
 """FastAPI endpoints for the IcBerg API.
 
-POST /chat — process a user message through the agent
-GET /history/{session_id} — fetch conversation history
-GET /health — component health check
+POST /chat - process a user message through the agent
+GET /history/{session_id} - fetch conversation history
+GET /health - component health check
 """
 
 import json
@@ -35,7 +35,7 @@ _output_guard = OutputGuard()
 
 @router.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest, req: Request):
-    """Process a user message: embed → context → agent → persist → respond."""
+    """Process a user message: embed -> context -> agent -> persist -> respond."""
     start = time.monotonic()
     session_id = request.session_id
     message = request.message
@@ -49,7 +49,7 @@ def chat(request: ChatRequest, req: Request):
     if agent is None:
         raise HTTPException(status_code=503, detail="Agent not available. Configure LLM API keys in .env and restart.")
 
-    # Input guardrail — block prompt injection before any processing
+    # Input guardrail - block prompt injection before any processing
     guard_result = _input_guard.check(message)
     if not guard_result.passed:
         latency_ms = int((time.monotonic() - start) * 1000)
@@ -427,7 +427,7 @@ def _extract_response(result: dict) -> tuple[str, str | None, list[str], dict]:
     if "Traceback (most recent call last)" in text:
         text = "An internal error occurred. Please try again."
 
-    # Strip inline base64/data image references — the image is rendered separately
+    # Strip inline base64/data image references - the image is rendered separately
     import re
     # Match ![...](data:image... or ![...](BASE64... even if unclosed
     text = re.sub(r"!\[[^\]]*\]\(\s*(?:data:image/[^\)]*|BASE64:[^\)]*)\)?", "", text)

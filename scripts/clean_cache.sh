@@ -2,7 +2,7 @@
 
 set -e
 
-echo "🧹 Cleaning up local caches and temporary files..."
+echo "[CLEAN] Cleaning up local caches and temporary files..."
 
 # Find and remove __pycache__ directories
 echo "> Removing __pycache__ directories..."
@@ -36,4 +36,4 @@ if [ -d ".ruff_cache" ]; then
     rm -rf .ruff_cache
 fi
 
-echo "✅ Cache cleanup complete!"
+echo "[OK] Cache cleanup complete!"

@@ -71,9 +71,9 @@ def query_data(operation: str) -> str:
     if not validation.is_valid:
         reasons = "; ".join(validation.violations)
         logger.warning("tool.query_data.validation_failed", reasons=reasons)
-        return f"ERROR: Code validation failed — {reasons}"
+        return f"ERROR: Code validation failed - {reasons}"
 
-    # Execute (single attempt — if retryable, the ReAct agent loop
+    # Execute (single attempt - if retryable, the ReAct agent loop
     # will regenerate different code on the next tool call)
     result = execute_code(operation, df)
 
@@ -105,7 +105,7 @@ def visualize_data(chart_code: str) -> str:
     validation = validate_generated_code(chart_code)
     if not validation.is_valid:
         reasons = "; ".join(validation.violations)
-        return f"ERROR: Code validation failed — {reasons}"
+        return f"ERROR: Code validation failed - {reasons}"
 
     # Wrap the user's chart code to render to base64 inside the subprocess.
     # This avoids passing matplotlib Figure objects across process boundaries.

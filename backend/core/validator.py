@@ -32,7 +32,7 @@ DANGEROUS_BUILTINS = frozenset({
     "globals", "locals", "getattr", "setattr", "delattr", "breakpoint", "__builtins__"
 })
 
-# Known DataFrame columns — set at startup via set_known_columns().
+# Known DataFrame columns - set at startup via set_known_columns().
 # When populated, string subscripts on `df` are checked against this set.
 _known_columns: frozenset[str] | None = None
 
@@ -90,23 +90,23 @@ def _check_imports(node: ast.AST, violations: list[str]) -> None:
         for alias in node.names:
             root = alias.name.split(".")[0]
             if root not in ALLOWED_IMPORT_ROOTS:
-                violations.append(f"Blocked import: '{alias.name}' — not in allowed list")
+                violations.append(f"Blocked import: '{alias.name}' - not in allowed list")
 
     elif isinstance(node, ast.ImportFrom) and node.module:
         root = node.module.split(".")[0]
         if root not in ALLOWED_IMPORT_ROOTS:
-            violations.append(f"Blocked import: 'from {node.module}' — not in allowed list")
+            violations.append(f"Blocked import: 'from {node.module}' - not in allowed list")
 
 
 def _check_dangerous_calls(node: ast.AST, violations: list[str]) -> None:
     """Reject direct calls to dangerous builtins (exec, eval, open, etc.)."""
     if isinstance(node, ast.Name):
         if node.id == "__builtins__":
-            violations.append(f"Blocked access to: '__builtins__' — dangerous operation")
+            violations.append(f"Blocked access to: '__builtins__' - dangerous operation")
 
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
         if node.func.id in DANGEROUS_BUILTINS:
-            violations.append(f"Blocked builtin call: '{node.func.id}()' — dangerous operation")
+            violations.append(f"Blocked builtin call: '{node.func.id}()' - dangerous operation")
 
 
 def _check_dangerous_attributes(node: ast.AST, violations: list[str]) -> None:
@@ -116,7 +116,7 @@ def _check_dangerous_attributes(node: ast.AST, violations: list[str]) -> None:
     which can traverse the object graph to reach os.system or builtins.
     """
     if isinstance(node, ast.Attribute) and node.attr.startswith("_"):
-        violations.append(f"Blocked attribute access: '{node.attr}' — private/dunder attributes are forbidden")
+        violations.append(f"Blocked attribute access: '{node.attr}' - private/dunder attributes are forbidden")
 
 
 def _collect_transient_columns(tree: ast.AST) -> frozenset[str]:
@@ -160,4 +160,4 @@ def _check_column_access(node: ast.AST, violations: list[str],
     if isinstance(slice_node, ast.Constant) and isinstance(slice_node.value, str):
         col = slice_node.value
         if col not in _known_columns and col not in transient_columns:
-            violations.append(f"Unknown column: '{col}' — not in dataset")
+            violations.append(f"Unknown column: '{col}' - not in dataset")

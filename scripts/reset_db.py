@@ -22,7 +22,7 @@ from backend.core.qdrant_manager import COLLECTIONS, QdrantManager
 
 def reset_sqlite(force: bool):
     """Drop and recreate SQLite tables."""
-    print("🧊 Resetting SQLite database...")
+    print("[IcBerg] Resetting SQLite database...")
     if not force:
         confirm = input("  This will delete all chat history. Continue? [y/N]: ")
         if confirm.lower() != 'y':
@@ -39,18 +39,18 @@ def reset_sqlite(force: bool):
     if db._engine:
         db.Base.metadata.drop_all(db._engine)
         db.Base.metadata.create_all(db._engine)
-        print("  ✅ SQLite tables dropped and recreated.")
+        print("  [OK] SQLite tables dropped and recreated.")
     else:
-        print("  ❌ Failed to initialize SQLite engine.")
+        print("  [ERROR] Failed to initialize SQLite engine.")
 
 
 def reset_qdrant(force: bool):
     """Drop and recreate Qdrant collections."""
-    print("🧊 Resetting Qdrant vector store...")
+    print("[IcBerg] Resetting Qdrant vector store...")
     qdrant = QdrantManager()
     
     if not qdrant.is_healthy():
-        print("  ❌ Could not connect to Qdrant. Check URL/API Key.")
+        print("  [ERROR] Could not connect to Qdrant. Check URL/API Key.")
         return
 
     if not force:
@@ -63,13 +63,13 @@ def reset_qdrant(force: bool):
     for col in COLLECTIONS:
         if client.collection_exists(col):
             client.delete_collection(col)
-            print(f"  🗑️ Deleted collection: {col}")
+            print(f"  [DEL] Deleted collection: {col}")
         else:
-            print(f"  ℹ️ Collection {col} did not exist.")
+            print(f"  [INFO] Collection {col} did not exist.")
             
     # _ensure_collections creates missing ones
     qdrant._ensure_collections()
-    print("  ✅ Qdrant collections recreated.")
+    print("  [OK] Qdrant collections recreated.")
 
 
 def main():
@@ -81,7 +81,7 @@ def main():
     # Load environment variables
     load_dotenv(project_root / ".env")
 
-    print("\n⚠️ WARNING: Database Reset ⚠️\n")
+    print("\n[WARN] WARNING: Database Reset [WARN]\n")
     
     if args.only in ["sqlite", None]:
         reset_sqlite(args.force)
@@ -91,7 +91,7 @@ def main():
         reset_qdrant(args.force)
         print("")
 
-    print("✅ Done!")
+    print("[OK] Done!")
 
 
 if __name__ == "__main__":

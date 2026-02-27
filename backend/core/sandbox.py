@@ -1,7 +1,7 @@
 """Sandboxed code execution with process isolation, timeout, and error classification.
 
 Runs validated Python code against a DataFrame copy inside a separate
-child process. This provides full OOM and crash isolation — if the user
+child process. This provides full OOM and crash isolation - if the user
 code allocates too much memory, the child process is killed without
 affecting the parent FastAPI server.
 
@@ -115,7 +115,7 @@ def _get_current_vm_bytes() -> int:
         with open("/proc/self/status") as f:
             for line in f:
                 if line.startswith("VmSize:"):
-                    return int(line.split()[1]) * 1024  # kB → bytes
+                    return int(line.split()[1]) * 1024  # kB -> bytes
     except (OSError, ValueError, IndexError):
         pass
     return 0
@@ -129,7 +129,7 @@ _IPC_OUTPUT_LIMIT = 100_000
 
 def _worker(code: str, df: pd.DataFrame, result_queue: multiprocessing.Queue,
             headroom_mb: int) -> None:
-    """Child process worker — applies memory limit and executes code.
+    """Child process worker - applies memory limit and executes code.
 
     This function runs in a completely isolated process. If it crashes
     (OOM, segfault), only this child process dies.
@@ -207,7 +207,7 @@ def execute_code(code: str, df: pd.DataFrame, timeout: int = 5) -> ExecutionResu
     """Run code in an isolated child process with resource limits.
 
     The executed code should assign its output to a variable named ``result``.
-    The original DataFrame is never mutated — a copy is used internally.
+    The original DataFrame is never mutated - a copy is used internally.
 
     Args:
         code: Validated Python source code.
@@ -241,7 +241,7 @@ def execute_code(code: str, df: pd.DataFrame, timeout: int = 5) -> ExecutionResu
             execution_time_ms=elapsed_ms,
         )
 
-    # Child exited — check how
+    # Child exited - check how
     if worker.exitcode != 0 and result_queue.empty():
         # Process was killed (OOM, segfault, etc.)
         if worker.exitcode == -9:  # SIGKILL (OOM killer)
@@ -257,7 +257,7 @@ def execute_code(code: str, df: pd.DataFrame, timeout: int = 5) -> ExecutionResu
             execution_time_ms=elapsed_ms,
         )
 
-    # Normal exit — read the result from the queue
+    # Normal exit - read the result from the queue
     if result_queue.empty():
         return ExecutionResult(
             success=False,

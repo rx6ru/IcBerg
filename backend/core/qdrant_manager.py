@@ -89,7 +89,7 @@ class QdrantManager:
         return self._client is not None
 
     def search_cache(self, collection: str, embedding: list[float], threshold: float) -> CacheResult:
-        """Semantic search — returns a hit if the top result's score >= threshold.
+        """Semantic search - returns a hit if the top result's score >= threshold.
 
         Args:
             collection: Name of the Qdrant collection to search.

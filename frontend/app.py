@@ -1,4 +1,4 @@
-"""IcBerg — Streamlit Chat Interface.
+"""IcBerg - Streamlit Chat Interface.
 
 Thin client for the Titanic dataset conversational analysis agent.
 All business logic lives in the FastAPI backend. This file handles:
@@ -26,8 +26,7 @@ HEALTH_ENDPOINT = f"{API_URL}/health"
 
 # Page setup
 st.set_page_config(
-    page_title="IcBerg — Titanic Analysis Agent",
-    page_icon="🧊",
+    page_title="IcBerg - Titanic Analysis Agent",
     layout="centered",
 )
 
@@ -89,7 +88,7 @@ def restore_history():
                     "image": msg.get("image_base64"),
                 })
     except requests.RequestException:
-        pass  # Gracefully degrade — start with empty history
+        pass  # Gracefully degrade - start with empty history
 
     st.session_state.history_loaded = True
 
@@ -103,7 +102,7 @@ def render_message(msg: dict):
                 image_bytes = base64.b64decode(msg["image"])
                 st.image(image_bytes, caption="Generated Chart", use_container_width=True)
             except Exception:
-                st.warning("⚠️ Could not decode chart image.")
+                st.warning("[WARN] Could not decode chart image.")
 
 
 def send_message(user_input: str):
@@ -121,7 +120,7 @@ def send_message(user_input: str):
 
     # Send to backend with live SSE parsing
     with st.chat_message("assistant"):
-        with st.status("🧊 Analyzing...", expanded=True) as status:
+        with st.status("[IcBerg] Analyzing...", expanded=True) as status:
             try:
                 start_time = time.monotonic()
                 resp = requests.post(
@@ -158,9 +157,9 @@ def send_message(user_input: str):
                             elif event_type == "tool_start":
                                 name = data.get('name', 'unknown')
                                 tools_used.append(name)
-                                status.write(f"⚙️ Running tool: **{name}**")
+                                status.write(f"[SYS] Running tool: **{name}**")
                             elif event_type == "tool_end":
-                                status.write(f"✅ Finished: **{data.get('name')}**")
+                                status.write(f"[OK] Finished: **{data.get('name')}**")
                             elif event_type == "final_text":
                                 final_text = data.get("content", "")
                             elif event_type == "image":
@@ -174,7 +173,7 @@ def send_message(user_input: str):
                     
                     # Update status header text to act as metadata footer
                     status.update(
-                        label=f"⏱️ {latency_ms}ms · 🔧 {', '.join(tools_used) if tools_used else 'No tools'}", 
+                        label=f"[TIME] {latency_ms}ms | [TOOL] {', '.join(tools_used) if tools_used else 'No tools'}", 
                         state="complete", 
                         expanded=False
                     )
@@ -187,7 +186,7 @@ def send_message(user_input: str):
                             image_bytes = base64.b64decode(image_base64)
                             st.image(image_bytes, caption="Generated Chart", use_container_width=True)
                         except Exception:
-                            st.warning("⚠️ Could not decode chart image.")
+                            st.warning("[WARN] Could not decode chart image.")
 
                     # Save to session
                     st.session_state.messages.append({
@@ -198,20 +197,20 @@ def send_message(user_input: str):
 
                 elif resp.status_code == 422:
                     status.update(label="Validation Error", state="error")
-                    st.error("❌ Invalid request. Please check your message.")
+                    st.error("[ERROR] Invalid request. Please check your message.")
                 else:
                     status.update(label="Server Error", state="error")
-                    st.error(f"❌ Server error ({resp.status_code}). Please try again.")
+                    st.error(f"[ERROR] Server error ({resp.status_code}). Please try again.")
 
             except requests.Timeout:
                 status.update(label="Timeout", state="error")
-                st.error("⏰ Request timed out. The server may be overloaded.")
+                st.error("[TIMEOUT] Request timed out. The server may be overloaded.")
             except requests.ConnectionError:
                 status.update(label="Connection Error", state="error")
-                st.error("🔌 Cannot connect to the backend. Is the API server running?")
+                st.error("[DISCONNECT] Cannot connect to the backend. Is the API server running?")
             except requests.RequestException as e:
                 status.update(label="Request Failed", state="error")
-                st.error(f"❌ Request failed: {e}")
+                st.error(f"[ERROR] Request failed: {e}")
 
 
 
@@ -221,7 +220,7 @@ def main():
     restore_history()
 
     # Header
-    st.title("🧊 IcBerg")
+    st.title("IcBerg")
     st.caption("Conversational analysis of the Titanic passenger dataset")
 
     # Sidebar
@@ -234,13 +233,13 @@ def main():
             health = requests.get(HEALTH_ENDPOINT, timeout=3).json()
             status = health.get("status", "unknown")
             if status == "healthy":
-                st.markdown('<span class="status-badge status-ok">● API Healthy</span>',
+                st.markdown('<span class="status-badge status-ok">* API Healthy</span>',
                             unsafe_allow_html=True)
             else:
-                st.markdown('<span class="status-badge status-err">● API Degraded</span>',
+                st.markdown('<span class="status-badge status-err">* API Degraded</span>',
                             unsafe_allow_html=True)
         except requests.RequestException:
-            st.markdown('<span class="status-badge status-err">● API Offline</span>',
+            st.markdown('<span class="status-badge status-err">* API Offline</span>',
                         unsafe_allow_html=True)
 
         st.divider()
@@ -252,7 +251,7 @@ def main():
         )
 
         st.divider()
-        if st.button("🗑️ New Session", use_container_width=True):
+        if st.button("[DEL] New Session", use_container_width=True):
             st.session_state.session_id = str(uuid4())
             st.session_state.messages = []
             st.session_state.history_loaded = False

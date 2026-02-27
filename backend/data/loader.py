@@ -129,7 +129,7 @@ def get_schema_metadata(df: pd.DataFrame) -> str:
         Multi-line schema description with dtypes and sample values.
     """
     lines = ["Dataset Schema (Titanic - Engineered):"]
-    lines.append(f"Shape: {df.shape[0]} rows × {df.shape[1]} columns")
+    lines.append(f"Shape: {df.shape[0]} rows x {df.shape[1]} columns")
     lines.append("")
 
     for col in df.columns:

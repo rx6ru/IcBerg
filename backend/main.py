@@ -1,6 +1,6 @@
 """FastAPI application entry point.
 
-Startup sequence: load data → init Qdrant → init LLM → create agent → init DB.
+Startup sequence: load data -> init Qdrant -> init LLM -> create agent -> init DB.
 """
 
 import os

@@ -20,7 +20,7 @@ from backend.core.qdrant_manager import QdrantManager
 
 logger = structlog.get_logger(__name__)
 
-# Global thread pool — shared across all requests, bounded to prevent thread exhaustion.
+# Global thread pool - shared across all requests, bounded to prevent thread exhaustion.
 _MAX_CONTEXT_WORKERS = int(os.environ.get("CONTEXT_POOL_MAX_WORKERS", "20"))
 _pool = ThreadPoolExecutor(max_workers=_MAX_CONTEXT_WORKERS)
 atexit.register(_pool.shutdown, wait=False)

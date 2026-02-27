@@ -1,7 +1,7 @@
-"""LLM adapter with Cerebras → Groq failover.
+"""LLM adapter with Cerebras -> Groq failover.
 
 Cerebras is the primary (fast inference). On timeout or 5xx, falls back to Groq.
-4xx errors fail immediately — no point retrying a bad request on a different provider.
+4xx errors fail immediately - no point retrying a bad request on a different provider.
 """
 
 import os

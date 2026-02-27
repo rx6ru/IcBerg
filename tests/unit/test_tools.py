@@ -57,7 +57,7 @@ class TestQueryData:
         assert result.startswith("ERROR:")
 
     def test_non_retryable_stops_immediately(self):
-        # SyntaxError is non-retryable — should fail without retrying
+        # SyntaxError is non-retryable - should fail without retrying
         result = query_data.invoke({"operation": "result = df[[["})
         assert result.startswith("ERROR:")
 
@@ -67,7 +67,7 @@ class TestQueryData:
         assert "NonExistent" in result
 
     def test_retryable_error(self):
-        # KeyError is retryable — will fail after MAX_RETRIES attempts
+        # KeyError is retryable - will fail after MAX_RETRIES attempts
         result = query_data.invoke({"operation": "result = df['AlsoNotReal'].sum()"})
         assert result.startswith("ERROR:")
 
