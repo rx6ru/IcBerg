@@ -257,10 +257,10 @@ def _extract_response(result: dict) -> tuple[str, str | None, list[str], dict]:
     if "Traceback (most recent call last)" in text:
         text = "An internal error occurred. Please try again."
 
-    # Strip inline base64 image references — the image is rendered separately
+    # Strip inline base64/data image references — the image is rendered separately
     import re
-    text = re.sub(r"!\[[^\]]*\]\(data:image/[^)]+\)", "", text)
-    text = re.sub(r"data:image/\S+", "", text)
+    text = re.sub(r"!\[[^\]]*\]\((?:data:image/[^)]+|BASE64:[^)]+)\)", "", text)
+    text = re.sub(r"(?:data:image/\S+|BASE64:\S+)", "", text)
     text = text.strip()
 
     trace = {"steps": trace_steps, "tools_called": tools_called}
