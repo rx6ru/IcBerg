@@ -24,6 +24,7 @@ class ValidationResult:
 
 ALLOWED_IMPORT_ROOTS = frozenset({
     "pandas", "numpy", "matplotlib", "seaborn", "math", "statistics",
+    "base64", "io",  # Needed for chart rendering inside sandbox subprocess
 })
 
 DANGEROUS_BUILTINS = frozenset({

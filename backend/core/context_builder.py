@@ -2,8 +2,12 @@
 
 Fetches data from Qdrant (cache + semantic history) and SQLite (recent messages)
 in parallel, then assembles a ContextBundle with token budgeting.
+
+Uses a module-level thread pool (bounded at 20 workers) to prevent
+thread exhaustion under concurrent request load.
 """
 
+import atexit
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -15,6 +19,11 @@ from backend.core.database import get_recent_messages
 from backend.core.qdrant_manager import QdrantManager
 
 logger = structlog.get_logger(__name__)
+
+# Global thread pool — shared across all requests, bounded to prevent thread exhaustion.
+_MAX_CONTEXT_WORKERS = int(os.environ.get("CONTEXT_POOL_MAX_WORKERS", "20"))
+_pool = ThreadPoolExecutor(max_workers=_MAX_CONTEXT_WORKERS)
+atexit.register(_pool.shutdown, wait=False)
 
 
 @dataclass
@@ -69,22 +78,21 @@ def build_context(
 
     bundle = ContextBundle(schema_info=schema_info)
 
-    # Parallel lookups
+    # Parallel lookups using global thread pool
     results = {}
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {
-            pool.submit(_fetch_execution_cache, qdrant, embedding, exec_threshold): "exec_cache",
-            pool.submit(_fetch_visualization_cache, qdrant, embedding, viz_threshold): "viz_cache",
-            pool.submit(_fetch_semantic_history, qdrant, session_id, embedding, semantic_k): "semantic",
-            pool.submit(_fetch_recent_messages, session_id, recent_k): "recent",
-        }
-        for future in as_completed(futures):
-            key = futures[future]
-            try:
-                results[key] = future.result()
-            except Exception as e:
-                logger.error("context.lookup_failed", key=key, error=str(e))
-                results[key] = None
+    futures = {
+        _pool.submit(_fetch_execution_cache, qdrant, embedding, exec_threshold): "exec_cache",
+        _pool.submit(_fetch_visualization_cache, qdrant, embedding, viz_threshold): "viz_cache",
+        _pool.submit(_fetch_semantic_history, qdrant, session_id, embedding, semantic_k): "semantic",
+        _pool.submit(_fetch_recent_messages, session_id, recent_k): "recent",
+    }
+    for future in as_completed(futures):
+        key = futures[future]
+        try:
+            results[key] = future.result()
+        except Exception as e:
+            logger.error("context.lookup_failed", key=key, error=str(e))
+            results[key] = None
 
     # Unpack results
     exec_result = results.get("exec_cache")

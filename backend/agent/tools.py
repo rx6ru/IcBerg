@@ -108,10 +108,6 @@ def visualize_data(chart_code: str) -> str:
     Returns:
         Base64-encoded PNG prefixed with "BASE64:", or an error message prefixed with "ERROR:".
     """
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
     df = _get_df()
 
     validation = validate_generated_code(chart_code)
@@ -119,25 +115,29 @@ def visualize_data(chart_code: str) -> str:
         reasons = "; ".join(validation.violations)
         return f"ERROR: Code validation failed — {reasons}"
 
-    # Execute the chart code
-    result = execute_code(chart_code, df)
+    # Wrap the user's chart code to render to base64 inside the subprocess.
+    # This avoids passing matplotlib Figure objects across process boundaries.
+    wrapped_code = (
+        "import matplotlib\n"
+        "matplotlib.use('Agg')\n"
+        "import matplotlib.pyplot as plt\n"
+        "import base64, io\n"
+        f"{chart_code}\n"
+        "# --- Auto-injected chart capture ---\n"
+        "_fig = result if hasattr(result, 'savefig') else plt.gcf()\n"
+        "_buf = io.BytesIO()\n"
+        "_fig.savefig(_buf, format='png', bbox_inches='tight', dpi=100)\n"
+        "_buf.seek(0)\n"
+        "result = base64.b64encode(_buf.read()).decode('utf-8')\n"
+        "plt.close('all')\n"
+    )
 
-    if not result.success:
-        return f"ERROR: {result.error}"
+    exec_result = execute_code(wrapped_code, df, timeout=10)
 
-    # Try to capture the figure
-    fig = result.output
-    if fig is None:
-        # Fallback: grab current figure if code didn't assign to `result`
-        fig = plt.gcf()
+    if not exec_result.success:
+        return f"ERROR: {exec_result.error}"
 
-    try:
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", bbox_inches="tight", dpi=100)
-        buf.seek(0)
-        encoded = base64.b64encode(buf.read()).decode("utf-8")
-        plt.close(fig)
+    encoded = exec_result.output
+    if encoded and isinstance(encoded, str):
         return f"BASE64:{encoded}"
-    except Exception as e:
-        plt.close("all")
-        return f"ERROR: Failed to encode chart — {e}"
+    return "ERROR: Chart rendering produced no output"
