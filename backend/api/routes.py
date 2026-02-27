@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from backend.agent.prompts import build_system_prompt
 from backend.api.schemas import (
@@ -89,11 +89,20 @@ def chat(request: ChatRequest, req: Request):
             "explain it and skip visualize_data. Otherwise, generate a new chart."
         )
 
-    # Invoke the agent
+    # Invoke the agent with conversation history for multi-turn memory
     try:
         messages = []
         if cache_context != "No cached data available.":
             messages.append(SystemMessage(content=cache_context))
+
+        # Inject recent conversation history so the agent remembers prior turns
+        if context and context.recent_messages:
+            for msg in context.recent_messages:
+                if msg.role == "user":
+                    messages.append(HumanMessage(content=msg.content))
+                elif msg.role == "assistant":
+                    messages.append(AIMessage(content=msg.content))
+
         messages.append(HumanMessage(content=message))
         agent_input = {"messages": messages}
         config = {"recursion_limit": 10}
