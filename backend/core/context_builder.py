@@ -139,7 +139,7 @@ def _estimate_context_tokens(bundle: ContextBundle) -> int:
     return total
 
 
-# --- Parallel fetch helpers (each handles its own errors gracefully) ---
+# Parallel fetch helpers (each handles its own errors gracefully)
 
 def _fetch_execution_cache(qdrant, embedding, threshold):
     """Search execution cache in Qdrant."""
