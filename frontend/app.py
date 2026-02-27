@@ -15,20 +15,20 @@ from uuid import uuid4
 import requests
 import streamlit as st
 
-# --- Configuration ---
+# Config
 API_URL = os.environ.get("API_URL", "http://localhost:8000")
 CHAT_ENDPOINT = f"{API_URL}/chat"
 HISTORY_ENDPOINT = f"{API_URL}/history"
 HEALTH_ENDPOINT = f"{API_URL}/health"
 
-# --- Page Config ---
+# Page setup
 st.set_page_config(
     page_title="IcBerg — Titanic Analysis Agent",
     page_icon="🧊",
     layout="centered",
 )
 
-# --- Custom Styles ---
+# Custom styles
 st.markdown("""
 <style>
     .stApp {
@@ -56,7 +56,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# --- Session State Initialization ---
+
 def init_session():
     """Initialize session state on first load."""
     if "session_id" not in st.session_state:
@@ -176,7 +176,7 @@ def send_message(user_input: str):
                 st.error(f"❌ Request failed: {e}")
 
 
-# --- Main App ---
+
 def main():
     """Run the Streamlit chat application."""
     init_session()

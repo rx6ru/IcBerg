@@ -22,10 +22,13 @@ from backend.api.schemas import (
 from backend.core.context_builder import build_context
 from backend.core.database import get_session_history, save_message
 from backend.core.embeddings import EmbeddingError, embed_text
+from backend.core.guardrails import InputGuard, OutputGuard
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter()
+_input_guard = InputGuard()
+_output_guard = OutputGuard()
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -44,15 +47,25 @@ def chat(request: ChatRequest, req: Request):
     if agent is None:
         raise HTTPException(status_code=503, detail="Agent not available. Configure LLM API keys in .env and restart.")
 
-    # Step 1: Embed the message
+    # Input guardrail — block prompt injection before any processing
+    guard_result = _input_guard.check(message)
+    if not guard_result.passed:
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return ChatResponse(
+            session_id=session_id,
+            text="I can only help with Titanic dataset analysis. Please rephrase your question.",
+            guardrail_triggered=True,
+            latency_ms=latency_ms,
+        )
+
+    # Embed the message for cache lookup
     embedding = None
     try:
         embedding = embed_text(message)
     except EmbeddingError as e:
         logger.error("chat.embedding_failed", error=str(e))
-        # Continue without cache — agent still works, just no context
 
-    # Step 2: Build context (cache + history)
+    # Build context (cache + history)
     context = None
     if embedding:
         try:
@@ -60,7 +73,7 @@ def chat(request: ChatRequest, req: Request):
         except Exception as e:
             logger.error("chat.context_failed", error=str(e))
 
-    # Step 3: Build cache-aware prompt injection
+    # Build cache-aware prompt
     cache_context = "No cached data available."
     if context and context.cache_type_hit == "execution":
         cache_context = (
@@ -76,7 +89,7 @@ def chat(request: ChatRequest, req: Request):
             "explain it and skip visualize_data. Otherwise, generate a new chart."
         )
 
-    # Step 4: Invoke the agent
+    # Invoke the agent
     try:
         messages = []
         if cache_context != "No cached data available.":
@@ -89,17 +102,19 @@ def chat(request: ChatRequest, req: Request):
         logger.error("chat.agent_failed", error=str(e))
         raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again in a moment.")
 
-    # Step 5: Extract response from agent messages
+    # Extract response and run output guardrail
     text, image_base64, tools_called, trace = _extract_response(result)
+    text, output_result = _output_guard.check(text)
+    guardrail_triggered = not output_result.passed
 
-    # Step 6: Persist messages
+    # Persist messages
     try:
         save_message(session_id, "user", message)
         save_message(session_id, "assistant", text, image_base64=image_base64, agent_trace=trace)
     except Exception as e:
         logger.error("chat.persist_failed", error=str(e))
 
-    # Step 7: Upsert to Qdrant caches
+    # Upsert to Qdrant caches
     if embedding and qdrant:
         try:
             # Always upsert to chat_history
@@ -135,6 +150,7 @@ def chat(request: ChatRequest, req: Request):
         text=text,
         image_base64=image_base64,
         cached=cached,
+        guardrail_triggered=guardrail_triggered,
         latency_ms=latency_ms,
         tools_called=tools_called,
     )

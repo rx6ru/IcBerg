@@ -29,6 +29,7 @@ class ChatResponse(BaseModel):
     text: str
     image_base64: str | None = None
     cached: bool = False
+    guardrail_triggered: bool = False
     latency_ms: int
     tools_called: list[str] = Field(default_factory=list)
 
