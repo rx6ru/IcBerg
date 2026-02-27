@@ -34,7 +34,7 @@ class LLMAdapter:
         self.groq_key = os.environ.get("GROQ_API_KEY", "")
 
         self.cerebras_model_name = os.environ.get("CEREBRAS_MODEL", "gpt-oss-120b")
-        self.groq_model_name = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+        self.groq_model_name = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 
         self.temperature = float(os.environ.get("LLM_TEMPERATURE", "0"))
         self.max_tokens = int(os.environ.get("LLM_MAX_TOKENS", "2048"))
