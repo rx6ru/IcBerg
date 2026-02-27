@@ -1,0 +1,32 @@
+# Backend dependencies for Docker image
+fastapi>=0.133.0
+uvicorn[standard]>=0.34.0
+pydantic>=2.12.0
+python-dotenv>=1.0.0
+
+# Agent
+langgraph>=1.0.0
+langgraph-prebuilt>=1.0.0
+
+# LLM Providers
+langchain-cerebras>=0.8.0
+langchain-groq>=1.1.0
+langchain-google-genai>=4.2.0
+
+# Embeddings
+google-genai>=1.65.0
+
+# Vector DB
+qdrant-client>=1.17.0
+
+# Database
+sqlalchemy>=2.0.40
+
+# Logging
+structlog>=25.5.0
+
+# Data Science
+pandas>=2.2.0
+matplotlib>=3.9.0
+seaborn>=0.13.0
+numpy>=1.26.0
