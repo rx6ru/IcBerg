@@ -39,25 +39,34 @@ class TestSearchCache:
 
     def test_miss_below_threshold(self, manager, mock_qdrant):
         from qdrant_client.http.models import ScoredPoint
-        mock_qdrant.search.return_value = [
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.points = [
             ScoredPoint(id=1, version=1, score=0.5, payload={"result": "data"}, vector=None)
         ]
+        mock_qdrant.query_points.return_value = response
         result = manager.search_cache("execution_cache", [0.1] * 3072, threshold=0.88)
         assert not result.hit
         assert result.score == 0.5
 
     def test_hit_above_threshold(self, manager, mock_qdrant):
         from qdrant_client.http.models import ScoredPoint
-        mock_qdrant.search.return_value = [
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.points = [
             ScoredPoint(id=1, version=1, score=0.95, payload={"result": "data"}, vector=None)
         ]
+        mock_qdrant.query_points.return_value = response
         result = manager.search_cache("execution_cache", [0.1] * 3072, threshold=0.88)
         assert result.hit
         assert result.payload == {"result": "data"}
         assert result.score == 0.95
 
     def test_empty_results(self, manager, mock_qdrant):
-        mock_qdrant.search.return_value = []
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.points = []
+        mock_qdrant.query_points.return_value = response
         assert not manager.search_cache("execution_cache", [0.1] * 3072, 0.88).hit
 
 
@@ -75,14 +84,17 @@ class TestSearchHistory:
 
     def test_filters_by_session(self, manager, mock_qdrant):
         from qdrant_client.http.models import ScoredPoint
-        mock_qdrant.search.return_value = [
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.points = [
             ScoredPoint(id=1, version=1, score=0.8, payload={"role": "user", "content": "hi"}, vector=None)
         ]
+        mock_qdrant.query_points.return_value = response
         results = manager.search_history("session-123", [0.1] * 3072, limit=5)
         assert len(results) == 1
 
         # verify the session_id filter was passed
-        kwargs = mock_qdrant.search.call_args.kwargs
+        kwargs = mock_qdrant.query_points.call_args.kwargs
         assert kwargs["query_filter"].must[0].key == "session_id"
         assert kwargs["query_filter"].must[0].match.value == "session-123"
 

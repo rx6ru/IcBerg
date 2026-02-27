@@ -103,11 +103,12 @@ class QdrantManager:
             return CacheResult(hit=False)
 
         try:
-            results = self._client.search(
+            response = self._client.query_points(
                 collection_name=collection,
-                query_vector=embedding,
+                query=embedding,
                 limit=1,
             )
+            results = response.points if response else []
 
             if not results:
                 return CacheResult(hit=False)
@@ -160,9 +161,9 @@ class QdrantManager:
             return []
 
         try:
-            results = self._client.search(
+            response = self._client.query_points(
                 collection_name="chat_history",
-                query_vector=embedding,
+                query=embedding,
                 limit=limit,
                 query_filter=models.Filter(
                     must=[
@@ -173,6 +174,7 @@ class QdrantManager:
                     ]
                 ),
             )
+            results = response.points if response else []
             return [{"score": r.score, "payload": r.payload} for r in results]
 
         except Exception as e:
