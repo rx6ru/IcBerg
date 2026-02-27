@@ -109,6 +109,60 @@ class TestSyntaxErrors:
         assert not validate_generated_code("").is_valid
 
 
+class TestDangerousAttributes:
+
+    def test_dunder_class_blocked(self):
+        assert not validate_generated_code("x = [].__class__").is_valid
+
+    def test_dunder_subclasses_blocked(self):
+        code = "x = object.__subclasses__()"
+        assert not validate_generated_code(code).is_valid
+
+    def test_dunder_globals_attr_blocked(self):
+        code = "x = f.__globals__"
+        assert not validate_generated_code(code).is_valid
+
+    def test_introspection_attack_blocked(self):
+        code = """
+for c in [].__class__.__base__.__subclasses__():
+    if c.__init__.__globals__ and 'sys' in c.__init__.__globals__:
+        sys = c.__init__.__globals__['sys']
+        os = sys.modules['os']
+        result = os.popen('whoami').read()
+"""
+        result = validate_generated_code(code)
+        assert not result.is_valid
+        assert any("__class__" in v for v in result.violations)
+
+    def test_private_attr_blocked(self):
+        assert not validate_generated_code("x = obj._private_method()").is_valid
+
+
+class TestTransientColumns:
+
+    def test_assign_and_read_transient_column(self):
+        from backend.core.validator import set_known_columns
+        set_known_columns(["A", "B"])
+        code = """
+df['C'] = df['A'] + df['B']
+result = df['C'].sum()
+"""
+        result = validate_generated_code(code)
+        assert result.is_valid, f"Violations: {result.violations}"
+
+    def test_unknown_column_still_blocked(self):
+        from backend.core.validator import set_known_columns
+        set_known_columns(["A", "B"])
+        code = "result = df['Z'].mean()"
+        assert not validate_generated_code(code).is_valid
+
+    def test_transient_column_without_assignment(self):
+        from backend.core.validator import set_known_columns
+        set_known_columns(["A"])
+        code = "result = df['NotAssigned'].mean()"
+        assert not validate_generated_code(code).is_valid
+
+
 class TestValidationResult:
 
     def test_dataclass_fields(self):
@@ -116,3 +170,4 @@ class TestValidationResult:
         assert result.is_valid is True
         assert result.violations == []
         assert result.sanitized_code == "x = 1"
+

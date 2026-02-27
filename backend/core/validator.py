@@ -66,10 +66,14 @@ def validate_generated_code(code: str) -> ValidationResult:
     except SyntaxError as e:
         return ValidationResult(is_valid=False, violations=[f"Syntax error: {e}"])
 
+    # Pre-pass: collect columns that the code itself creates (e.g. df['AgeGroup'] = ...)
+    transient_columns = _collect_transient_columns(tree)
+
     for node in ast.walk(tree):
         _check_imports(node, violations)
         _check_dangerous_calls(node, violations)
-        _check_column_access(node, violations)
+        _check_dangerous_attributes(node, violations)
+        _check_column_access(node, violations, transient_columns)
 
     is_valid = len(violations) == 0
     return ValidationResult(
@@ -104,11 +108,40 @@ def _check_dangerous_calls(node: ast.AST, violations: list[str]) -> None:
             violations.append(f"Blocked builtin call: '{node.func.id}()' — dangerous operation")
 
 
-def _check_column_access(node: ast.AST, violations: list[str]) -> None:
+def _check_dangerous_attributes(node: ast.AST, violations: list[str]) -> None:
+    """Block access to private/dunder attributes to prevent object introspection escapes.
+
+    Prevents attacks like: [].__class__.__base__.__subclasses__()
+    which can traverse the object graph to reach os.system or builtins.
+    """
+    if isinstance(node, ast.Attribute) and node.attr.startswith("_"):
+        violations.append(f"Blocked attribute access: '{node.attr}' — private/dunder attributes are forbidden")
+
+
+def _collect_transient_columns(tree: ast.AST) -> frozenset[str]:
+    """Pre-pass: find columns being assigned to df (e.g. df['NewCol'] = ...).
+
+    These are allowed in subsequent reads even if they aren't in the original schema.
+    """
+    transient: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (isinstance(target, ast.Subscript)
+                        and isinstance(target.value, ast.Name)
+                        and target.value.id == "df"
+                        and isinstance(target.slice, ast.Constant)
+                        and isinstance(target.slice.value, str)):
+                    transient.add(target.slice.value)
+    return frozenset(transient)
+
+
+def _check_column_access(node: ast.AST, violations: list[str],
+                         transient_columns: frozenset[str] = frozenset()) -> None:
     """Flag string subscripts on `df` that reference unknown columns.
 
     Only active when _known_columns has been set via set_known_columns().
-    Catches patterns like df['NonExistent'] and df["BadCol"].
+    Allows columns in either the original schema or transient (assigned) set.
     """
     if _known_columns is None:
         return
@@ -125,5 +158,5 @@ def _check_column_access(node: ast.AST, violations: list[str]) -> None:
     slice_node = node.slice
     if isinstance(slice_node, ast.Constant) and isinstance(slice_node.value, str):
         col = slice_node.value
-        if col not in _known_columns:
+        if col not in _known_columns and col not in transient_columns:
             violations.append(f"Unknown column: '{col}' — not in dataset")

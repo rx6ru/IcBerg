@@ -91,11 +91,11 @@ class LLMAdapter:
             return self.primary_llm.invoke(messages)
 
         except HTTPStatusError as e:
-            if 400 <= e.response.status_code < 500:
+            if 400 <= e.response.status_code < 500 and e.response.status_code != 429:
                 logger.error("llm.4xx", status=e.response.status_code)
                 raise LLMError(f"Cerebras API rejected request ({e.response.status_code}): {e}")
 
-            logger.warning("llm.5xx_fallback", status=e.response.status_code)
+            logger.warning("llm.fallback", status=e.response.status_code)
 
         except ReadTimeout:
             logger.warning("llm.timeout_fallback", threshold=self.timeout)
