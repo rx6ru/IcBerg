@@ -121,6 +121,12 @@ def _get_current_vm_bytes() -> int:
     return 0
 
 
+# Maximum characters allowed in IPC output to prevent deserialization OOM
+# in the parent process.  100 KB of text is more than enough for any
+# analytical result the LLM needs to interpret.
+_IPC_OUTPUT_LIMIT = 100_000
+
+
 def _worker(code: str, df: pd.DataFrame, result_queue: multiprocessing.Queue,
             headroom_mb: int) -> None:
     """Child process worker — applies memory limit and executes code.
@@ -154,6 +160,12 @@ def _worker(code: str, df: pd.DataFrame, result_queue: multiprocessing.Queue,
         elif output_type == "series":
             output = output.to_string()
 
+        # Truncate to prevent IPC memory bomb: a malicious payload could
+        # generate an 800MB string under RLIMIT_AS and OOM the parent
+        # during pickle deserialization.
+        if isinstance(output, str) and len(output) > _IPC_OUTPUT_LIMIT:
+            output = output[:_IPC_OUTPUT_LIMIT] + "\n...[TRUNCATED]"
+
         result_queue.put({
             "success": True,
             "output": output,
@@ -176,7 +188,7 @@ def _worker(code: str, df: pd.DataFrame, result_queue: multiprocessing.Queue,
             "success": False,
             "output": None,
             "output_type": "none",
-            "error": f"MemoryError: code exceeded {memory_limit_mb}MB memory limit",
+            "error": f"MemoryError: code exceeded {headroom_mb}MB memory limit",
             "retryable": False,
         })
 

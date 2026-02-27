@@ -25,11 +25,13 @@ class TestLLMAdapterInit:
 
     def test_primary_is_cerebras(self, adapter):
         from langchain_cerebras import ChatCerebras
+        from langchain_core.runnables import RunnableWithFallbacks
         model = adapter.get_chat_model()
-        assert isinstance(model, ChatCerebras)
-        assert model.model == "test-cerebras-model"
-        assert model.temperature == 0.0
-        assert model.max_tokens == 2048
+        assert isinstance(model, RunnableWithFallbacks)
+        assert isinstance(model.runnable, ChatCerebras)
+        assert model.runnable.model == "test-cerebras-model"
+        assert model.runnable.temperature == 0.0
+        assert model.runnable.max_tokens == 2048
 
 
 class TestLLMFailover:

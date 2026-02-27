@@ -29,7 +29,7 @@ router = APIRouter()
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, req: Request):
+def chat(request: ChatRequest, req: Request):
     """Process a user message: embed → context → agent → persist → respond."""
     start = time.monotonic()
     session_id = request.session_id
@@ -60,9 +60,18 @@ async def chat(request: ChatRequest, req: Request):
     # Step 3: Build cache-aware prompt injection
     cache_context = "No cached data available."
     if context and context.cache_type_hit == "execution":
-        cache_context = f"CACHED DATA AVAILABLE — use directly, skip query_data: {context.cached_execution}"
+        cache_context = (
+            f"CACHED DATA: {context.cached_execution}\n"
+            "CRITICAL: Compare the cached 'query' to the user's CURRENT question. "
+            "If demographics, columns, filters, or conditions differ in ANY way, "
+            "IGNORE this cache entirely and use query_data to compute fresh results."
+        )
     elif context and context.cache_type_hit == "visualization":
-        cache_context = "CHART ALREADY AVAILABLE — explain it, skip visualize_data."
+        cache_context = (
+            "A CHART was previously generated for a similar query. "
+            "If the user's current question matches the cached chart's intent exactly, "
+            "explain it and skip visualize_data. Otherwise, generate a new chart."
+        )
 
     # Step 4: Invoke the agent
     try:
@@ -125,14 +134,14 @@ async def chat(request: ChatRequest, req: Request):
 
 
 @router.get("/history/{session_id}", response_model=HistoryResponse)
-async def history(session_id: str):
+def history(session_id: str):
     """Fetch full conversation history for a session."""
     messages = get_session_history(session_id)
     return HistoryResponse(session_id=session_id, messages=messages)
 
 
 @router.get("/health")
-async def health(req: Request):
+def health(req: Request):
     """Check health of all backend components."""
     components = {}
 

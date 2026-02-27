@@ -57,12 +57,16 @@ class LLMAdapter:
         )
 
     def get_chat_model(self) -> BaseChatModel:
-        """Return the primary model instance.
+        """Return the primary model with automatic Groq fallback.
+
+        Uses LangChain's native `.with_fallbacks()` so LangGraph's
+        internal `.invoke()` calls transparently retry on Groq when
+        Cerebras returns 5xx, 429, or times out.
 
         Returns:
-            ChatCerebras instance. For failover, use invoke_with_failover() instead.
+            A RunnableWithFallbacks wrapping Cerebras → Groq.
         """
-        return self.primary_llm
+        return self.primary_llm.with_fallbacks([self.fallback_llm])
 
     def is_healthy(self) -> bool:
         """Check if at least one provider has a key configured.
