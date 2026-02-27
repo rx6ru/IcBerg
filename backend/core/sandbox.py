@@ -33,9 +33,34 @@ class ExecutionResult:
     execution_time_ms: int = 0
 
 
+import builtins
+from backend.core.validator import ALLOWED_IMPORT_ROOTS
+
 RETRYABLE_ERRORS = (KeyError, TypeError, ValueError, AttributeError, IndexError, ZeroDivisionError)
 NON_RETRYABLE_ERRORS = (SyntaxError, NameError, ImportError, MemoryError, RecursionError)
 
+_DANGEROUS = frozenset({
+    "exec", "eval", "open", "__import__", "compile",
+    "globals", "locals", "getattr", "setattr", "delattr", "breakpoint", "input", "print"
+})
+
+
+def _safe_import(name: str, globals: dict | None = None, locals: dict | None = None, fromlist: tuple = (), level: int = 0) -> Any:
+    """Wrapper around __import__ to enforce the same whitelist as the AST validator at runtime."""
+    root = name.split(".")[0]
+    if root not in ALLOWED_IMPORT_ROOTS:
+        raise ImportError(f"Dynamic import of '{name}' is blocked by sandbox")
+    return __import__(name, globals, locals, fromlist, level)
+
+
+SAFE_BUILTINS = {
+    name: getattr(builtins, name)
+    for name in dir(builtins)
+    if name not in _DANGEROUS and not name.startswith("_")
+}
+SAFE_BUILTINS["__build_class__"] = builtins.__build_class__
+SAFE_BUILTINS["__name__"] = "__main__"
+SAFE_BUILTINS["__import__"] = _safe_import
 
 class _TimeoutError(Exception):
     pass
@@ -96,7 +121,7 @@ def execute_code(code: str, df: pd.DataFrame, timeout: int = 5) -> ExecutionResu
     start_time = time.monotonic()
     df_copy = df.copy()
 
-    exec_globals: dict[str, Any] = {"__builtins__": __builtins__}
+    exec_globals: dict[str, Any] = {"__builtins__": SAFE_BUILTINS}
     exec_locals: dict[str, Any] = {"df": df_copy}
 
     old_handler = signal.signal(signal.SIGALRM, _timeout_handler)

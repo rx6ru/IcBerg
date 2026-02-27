@@ -28,7 +28,7 @@ ALLOWED_IMPORT_ROOTS = frozenset({
 
 DANGEROUS_BUILTINS = frozenset({
     "exec", "eval", "open", "__import__", "compile",
-    "globals", "locals", "getattr", "setattr", "delattr", "breakpoint",
+    "globals", "locals", "getattr", "setattr", "delattr", "breakpoint", "__builtins__"
 })
 
 # Known DataFrame columns — set at startup via set_known_columns().
@@ -95,6 +95,10 @@ def _check_imports(node: ast.AST, violations: list[str]) -> None:
 
 def _check_dangerous_calls(node: ast.AST, violations: list[str]) -> None:
     """Reject direct calls to dangerous builtins (exec, eval, open, etc.)."""
+    if isinstance(node, ast.Name):
+        if node.id == "__builtins__":
+            violations.append(f"Blocked access to: '__builtins__' — dangerous operation")
+
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
         if node.func.id in DANGEROUS_BUILTINS:
             violations.append(f"Blocked builtin call: '{node.func.id}()' — dangerous operation")

@@ -61,6 +61,9 @@ class TestDangerousBuiltins:
     def test_dunder_import_blocked(self):
         assert not validate_generated_code("__import__('os')").is_valid
 
+    def test_builtins_blocked(self):
+        assert not validate_generated_code("__builtins__['open']('file')").is_valid
+
     def test_compile_blocked(self):
         assert not validate_generated_code("compile('code', '<string>', 'exec')").is_valid
 

@@ -7,8 +7,8 @@ from backend.core.sandbox import execute_code, ExecutionResult
 class TestTimeout:
 
     def test_timeout_kills_slow_code(self, mock_titanic_df):
-        code = "import time; time.sleep(10)"
-        result = execute_code(code, mock_titanic_df, timeout=5)
+        code = "while True: pass"
+        result = execute_code(code, mock_titanic_df, timeout=1)
         assert not result.success
         assert "timeout" in result.error.lower()
         assert not result.retryable
@@ -70,3 +70,21 @@ class TestDfIsolation:
         original_len = len(mock_titanic_df)
         execute_code("df.drop(df.index, inplace=True); result = len(df)", mock_titanic_df)
         assert len(mock_titanic_df) == original_len
+
+
+class TestSandboxSecurity:
+
+    def test_escape_via_builtins_dict_raises_keyerror(self, mock_titanic_df):
+        # We manually bypass AST validator to test the sandbox isolation layer directly
+        code = "result = __builtins__['open']('/etc/passwd').read()"
+        res = execute_code(code, mock_titanic_df)
+        assert not res.success
+        assert "KeyError: 'open'" in res.error
+
+    def test_escape_via_dynamic_import_raises_importerror(self, mock_titanic_df):
+        # Test the _safe_import wrapper
+        code = "result = __import__('os').system('echo hacked')"
+        res = execute_code(code, mock_titanic_df)
+        assert not res.success
+        assert "ImportError" in res.error
+        assert "blocked by sandbox" in res.error
