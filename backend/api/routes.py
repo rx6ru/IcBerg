@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.agent.prompts import build_system_prompt
 from backend.api.schemas import (
@@ -75,7 +75,11 @@ def chat(request: ChatRequest, req: Request):
 
     # Step 4: Invoke the agent
     try:
-        agent_input = {"messages": [HumanMessage(content=message)]}
+        messages = []
+        if cache_context != "No cached data available.":
+            messages.append(SystemMessage(content=cache_context))
+        messages.append(HumanMessage(content=message))
+        agent_input = {"messages": messages}
         config = {"recursion_limit": 10}
         result = agent.invoke(agent_input, config=config)
     except Exception as e:
@@ -152,7 +156,7 @@ def health(req: Request):
 
     # Qdrant
     qdrant = req.app.state.qdrant
-    components["qdrant"] = "ok" if qdrant.healthy else "error"
+    components["qdrant"] = "ok" if qdrant.is_healthy() else "error"
 
     # SQLite
     try:

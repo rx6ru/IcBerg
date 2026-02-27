@@ -73,27 +73,19 @@ def query_data(operation: str) -> str:
         logger.warning("tool.query_data.validation_failed", reasons=reasons)
         return f"ERROR: Code validation failed — {reasons}"
 
-    # Execute with retry on retryable errors
-    last_error = None
-    for attempt in range(1, MAX_RETRIES + 1):
-        result = execute_code(operation, df)
+    # Execute (single attempt — if retryable, the ReAct agent loop
+    # will regenerate different code on the next tool call)
+    result = execute_code(operation, df)
 
-        if result.success:
-            output = result.output
-            if isinstance(output, pd.DataFrame):
-                return output.to_string()
-            if isinstance(output, pd.Series):
-                return output.to_string()
-            return str(output) if output is not None else "No result produced."
+    if result.success:
+        output = result.output
+        if isinstance(output, pd.DataFrame):
+            return output.to_string()
+        if isinstance(output, pd.Series):
+            return output.to_string()
+        return str(output) if output is not None else "No result produced."
 
-        last_error = result.error
-        if not result.retryable:
-            logger.warning("tool.query_data.non_retryable", error=last_error, attempt=attempt)
-            break
-
-        logger.debug("tool.query_data.retry", error=last_error, attempt=attempt)
-
-    return f"ERROR: {last_error}"
+    return f"ERROR: {result.error}"
 
 
 @tool

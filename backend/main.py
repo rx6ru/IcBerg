@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
     # 2. Initialize Qdrant
     qdrant = QdrantManager()
     app.state.qdrant = qdrant
-    logger.info("startup.qdrant_initialized", healthy=qdrant.healthy)
+    logger.info("startup.qdrant_initialized", healthy=qdrant.is_healthy())
 
     # 3. Initialize LLM adapter
     llm_adapter = LLMAdapter()
