@@ -1,7 +1,7 @@
 """AST-based validator for generated Python code.
 
-Walks the syntax tree and blocks dangerous imports/builtins
-before code reaches the sandbox.
+Walks the syntax tree and blocks dangerous imports, builtins,
+and unknown column references before code reaches the sandbox.
 """
 
 import ast
@@ -31,9 +31,24 @@ DANGEROUS_BUILTINS = frozenset({
     "globals", "locals", "getattr", "setattr", "delattr", "breakpoint",
 })
 
+# Known DataFrame columns — set at startup via set_known_columns().
+# When populated, string subscripts on `df` are checked against this set.
+_known_columns: frozenset[str] | None = None
+
+
+def set_known_columns(columns: list[str]) -> None:
+    """Register the valid column names from the loaded DataFrame.
+
+    Args:
+        columns: List of column names (original + engineered).
+    """
+    global _known_columns
+    _known_columns = frozenset(columns)
+
 
 def validate_generated_code(code: str) -> ValidationResult:
-    """Parse code into AST and check for blocked imports and dangerous calls.
+    """Parse code into AST and check for blocked imports, dangerous calls,
+    and unknown column references.
 
     Args:
         code: Python source code string to validate.
@@ -54,6 +69,7 @@ def validate_generated_code(code: str) -> ValidationResult:
     for node in ast.walk(tree):
         _check_imports(node, violations)
         _check_dangerous_calls(node, violations)
+        _check_column_access(node, violations)
 
     is_valid = len(violations) == 0
     return ValidationResult(
@@ -82,3 +98,28 @@ def _check_dangerous_calls(node: ast.AST, violations: list[str]) -> None:
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
         if node.func.id in DANGEROUS_BUILTINS:
             violations.append(f"Blocked builtin call: '{node.func.id}()' — dangerous operation")
+
+
+def _check_column_access(node: ast.AST, violations: list[str]) -> None:
+    """Flag string subscripts on `df` that reference unknown columns.
+
+    Only active when _known_columns has been set via set_known_columns().
+    Catches patterns like df['NonExistent'] and df["BadCol"].
+    """
+    if _known_columns is None:
+        return
+
+    # Match: df['column_name'] or df["column_name"]
+    if not isinstance(node, ast.Subscript):
+        return
+
+    # Check that the value being subscripted is named 'df'
+    if not (isinstance(node.value, ast.Name) and node.value.id == "df"):
+        return
+
+    # Extract the column name from the subscript slice
+    slice_node = node.slice
+    if isinstance(slice_node, ast.Constant) and isinstance(slice_node.value, str):
+        col = slice_node.value
+        if col not in _known_columns:
+            violations.append(f"Unknown column: '{col}' — not in dataset")

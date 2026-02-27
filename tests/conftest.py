@@ -53,3 +53,32 @@ def sample_dangerous_code() -> str:
 @pytest.fixture
 def sample_timeout_code() -> str:
     return "import time; time.sleep(10)"
+
+
+@pytest.fixture
+def engineered_df() -> pd.DataFrame:
+    """Post feature-engineering DataFrame (leakage columns dropped)."""
+    data = {
+        "Survived": [0, 1, 1, 1, 0, 0, 0, 1, 1, 0],
+        "Pclass": [3, 1, 3, 1, 3, 3, 1, 3, 2, 2],
+        "Sex": [
+            "male", "female", "female", "female", "male",
+            "male", "male", "male", "female", "male",
+        ],
+        "Age": [22.0, 38.0, 26.0, 35.0, 35.0, None, 54.0, 2.0, 15.0, 66.0],
+        "SibSp": [1, 1, 0, 1, 0, 0, 0, 3, 0, 1],
+        "Parch": [0, 0, 0, 0, 0, 0, 0, 1, 2, 0],
+        "Fare": [7.25, 71.28, 7.92, 53.10, 8.05, 8.46, 51.86, 21.07, 11.50, 108.90],
+        "Embarked": ["S", "C", "S", "S", "S", "Q", "S", "S", "S", "C"],
+        "Title": ["Mr", "Mrs", "Miss", "Mrs", "Mr", "Mr", "Mr", "Master", "Mrs", "Dr"],
+        "FamilySize": [2, 2, 1, 2, 1, 1, 1, 5, 3, 2],
+        "AgeGroup": [
+            "YoungAdult", "Adult", "YoungAdult", "Adult", "Adult",
+            "Unknown", "Adult", "Child", "Teen", "Senior",
+        ],
+        "FareGroup": [
+            "Budget", "Comfort", "Budget", "Comfort", "Economy",
+            "Economy", "Comfort", "Economy", "Economy", "Luxury",
+        ],
+    }
+    return pd.DataFrame(data)
