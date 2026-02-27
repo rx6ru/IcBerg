@@ -44,6 +44,13 @@ def init_db(database_url: str | None = None) -> None:
     global _engine, _SessionLocal
 
     url = database_url or os.environ.get("DATABASE_URL", "sqlite:///data/icberg.sqlite")
+
+    # Auto-create parent directories for SQLite (needed on Render/cloud deploys)
+    if url.startswith("sqlite:///"):
+        from pathlib import Path
+        db_path = url.replace("sqlite:///", "")
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+
     _engine = create_engine(url, echo=False)
     _SessionLocal = sessionmaker(bind=_engine)
 
