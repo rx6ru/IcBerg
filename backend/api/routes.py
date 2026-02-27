@@ -259,8 +259,12 @@ def _extract_response(result: dict) -> tuple[str, str | None, list[str], dict]:
 
     # Strip inline base64/data image references — the image is rendered separately
     import re
-    text = re.sub(r"!\[[^\]]*\]\((?:data:image/[^)]+|BASE64:[^)]+)\)", "", text)
+    # Match ![...](data:image... or ![...](BASE64... even if unclosed
+    text = re.sub(r"!\[[^\]]*\]\(\s*(?:data:image/[^\)]*|BASE64:[^\)]*)\)?", "", text)
+    # Match any remaining raw base64 data strings
     text = re.sub(r"(?:data:image/\S+|BASE64:\S+)", "", text)
+    # Strip any dangling/empty image markdown left over (e.g. `![Age Distribution](`)
+    text = re.sub(r"!\[[^\]]*\]\s*\(\s*$", "", text)
     text = text.strip()
 
     trace = {"steps": trace_steps, "tools_called": tools_called}
