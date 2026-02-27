@@ -34,10 +34,11 @@ def reset_sqlite(force: bool):
     init_db(db_path)
     
     # Drop all tables and recreate
-    from backend.core.database import Base
-    if _engine:
-        Base.metadata.drop_all(_engine)
-        Base.metadata.create_all(_engine)
+    import backend.core.database as db
+    
+    if db._engine:
+        db.Base.metadata.drop_all(db._engine)
+        db.Base.metadata.create_all(db._engine)
         print("  ✅ SQLite tables dropped and recreated.")
     else:
         print("  ❌ Failed to initialize SQLite engine.")
