@@ -111,11 +111,13 @@ class TestLoadDataframe:
         assert "AgeGroup" in df.columns
         assert "FareGroup" in df.columns
 
-        # leakage columns dropped
+        # leakage columns dropped (only Cabin and Ticket)
         assert "Cabin" not in df.columns
         assert "Ticket" not in df.columns
-        assert "Name" not in df.columns
-        assert "PassengerId" not in df.columns
+
+        # Name and PassengerId are kept for analysis
+        assert "Name" in df.columns
+        assert "PassengerId" in df.columns
 
     def test_ground_truth_male_percentage(self, tmp_path):
         import shutil

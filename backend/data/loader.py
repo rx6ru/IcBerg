@@ -83,7 +83,7 @@ def compute_family_size(sibsp: int, parch: int) -> int:
     return sibsp + parch + 1
 
 
-_LEAKAGE_COLUMNS = ["Cabin", "Ticket", "Name", "PassengerId"]
+_LEAKAGE_COLUMNS = ["Cabin", "Ticket"]
 
 
 def _apply_feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
