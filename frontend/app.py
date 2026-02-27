@@ -177,24 +177,6 @@ def send_message(user_input: str):
                         state="complete", 
                         expanded=False
                     )
-
-                    # Render response outside the status box
-                    st.markdown(final_text)
-
-                    if image_base64:
-                        try:
-                            image_bytes = base64.b64decode(image_base64)
-                            st.image(image_bytes, caption="Generated Chart", use_container_width=True)
-                        except Exception:
-                            st.warning("[WARN] Could not decode chart image.")
-
-                    # Save to session
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": final_text,
-                        "image": image_base64,
-                    })
-
                 elif resp.status_code == 422:
                     status.update(label="Validation Error", state="error")
                     st.error("[ERROR] Invalid request. Please check your message.")
@@ -205,12 +187,37 @@ def send_message(user_input: str):
             except requests.Timeout:
                 status.update(label="Timeout", state="error")
                 st.error("[TIMEOUT] Request timed out. The server may be overloaded.")
+                return
             except requests.ConnectionError:
                 status.update(label="Connection Error", state="error")
                 st.error("[DISCONNECT] Cannot connect to the backend. Is the API server running?")
-            except requests.RequestException as e:
+                return
+            except Exception as e:
                 status.update(label="Request Failed", state="error")
-                st.error(f"[ERROR] Request failed: {e}")
+                st.error(f"[ERROR] Connection error: {str(e)}")
+                return
+
+        # Render response outside the status box (Thinking component)
+        if resp and resp.status_code == 200:
+            st.markdown(final_text)
+
+            if image_base64:
+                try:
+                    image_bytes = base64.b64decode(image_base64)
+                    st.image(image_bytes, caption="Generated Chart", use_container_width=True)
+                except Exception:
+                    st.warning("[WARN] Could not decode chart image.")
+
+            # Save to session
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": final_text,
+                "image": image_base64,
+            })
+        elif resp and resp.status_code == 422:
+            st.error("[ERROR] Invalid request. Please check your message.")
+        elif resp: # For other non-200, non-422 status codes
+            st.error(f"[ERROR] Server error ({resp.status_code}). Please try again.")
 
 
 
