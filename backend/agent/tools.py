@@ -5,8 +5,6 @@ Four tools that the LangGraph ReAct agent can call. All return strings
 use the validator + sandbox pipeline with retry logic.
 """
 
-import base64
-import io
 
 import pandas as pd
 import structlog

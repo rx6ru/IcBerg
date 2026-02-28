@@ -149,7 +149,7 @@ def send_message(user_input: str):
                     for line in resp.iter_lines():
                         if not line:
                             continue
-                        
+
                         decoded_line = line.decode('utf-8')
                         if decoded_line.startswith("data: "):
                             raw_data = decoded_line[6:]
@@ -157,9 +157,9 @@ def send_message(user_input: str):
                                 data = json.loads(raw_data)
                             except json.JSONDecodeError:
                                 continue
-                                
+
                             event_type = data.get("type")
-                            
+
                             if event_type == "start":
                                 status.update(label=data.get("content", "Analyzing..."))
                             elif event_type == "tool_start":
@@ -178,11 +178,11 @@ def send_message(user_input: str):
 
                     # Calculate latency
                     latency_ms = int((time.monotonic() - start_time) * 1000)
-                    
+
                     # Update status header text to act as metadata footer
                     status.update(
-                        label=f"[TIME] {latency_ms}ms | [TOOL] {', '.join(tools_used) if tools_used else 'No tools'}", 
-                        state="complete", 
+                        label=f"[TIME] {latency_ms}ms | [TOOL] {', '.join(tools_used) if tools_used else 'No tools'}",
+                        state="complete",
                         expanded=False
                     )
                 elif resp.status_code == 422:
@@ -272,11 +272,11 @@ def main():
                 st.markdown('<span class="status-badge status-err">* API Offline</span>',
                             unsafe_allow_html=True)
                 st.info("[INFO] Backend may be sleeping (Render Free Tier).")
-                
+
                 # Sustainable Auto-ping logic: cap at 6 attempts (~1 min)
                 if "retry_count" not in st.session_state:
                     st.session_state.retry_count = 0
-                
+
                 if st.session_state.retry_count < 6:
                     if "last_ping" not in st.session_state or time.time() - st.session_state.last_ping > 12:
                         st.session_state.last_ping = time.time()

@@ -1,8 +1,9 @@
 """Unit tests for SQLite database operations (in-memory)."""
 
+
 import pytest
-from datetime import datetime, timezone
-from backend.core.database import init_db, save_message, get_recent_messages, get_session_history
+
+from backend.core.database import get_recent_messages, get_session_history, init_db, save_message
 
 
 @pytest.fixture(autouse=True)

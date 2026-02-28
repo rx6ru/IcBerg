@@ -1,9 +1,11 @@
 """Unit tests for Pydantic API schemas."""
 
-import pytest
 from datetime import datetime
+
+import pytest
 from pydantic import ValidationError
-from backend.api.schemas import ChatRequest, ChatResponse, MessageRecord, HistoryResponse
+
+from backend.api.schemas import ChatRequest, ChatResponse, MessageRecord
 
 
 class TestChatRequest:

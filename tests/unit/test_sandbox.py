@@ -1,7 +1,6 @@
 """Tests for the sandboxed code executor."""
 
-import pytest
-from backend.core.sandbox import execute_code, ExecutionResult
+from backend.core.sandbox import ExecutionResult, execute_code
 
 
 class TestTimeout:

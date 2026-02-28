@@ -1,14 +1,13 @@
 """Unit tests for agent tools."""
 
 import pytest
-import pandas as pd
 
 from backend.agent.tools import (
     get_dataset_info,
     get_statistics,
     query_data,
-    visualize_data,
     set_dataframe,
+    visualize_data,
 )
 from backend.core.validator import set_known_columns
 

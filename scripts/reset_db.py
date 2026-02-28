@@ -16,7 +16,7 @@ sys.path.insert(0, str(project_root))
 
 from dotenv import load_dotenv
 
-from backend.core.database import Message, _engine, init_db
+from backend.core.database import init_db
 from backend.core.qdrant_manager import COLLECTIONS, QdrantManager
 
 
@@ -32,10 +32,10 @@ def reset_sqlite(force: bool):
     db_path = os.environ.get("DATABASE_URL", "sqlite:///backend/data/icberg.sqlite")
     # Initialize engine
     init_db(db_path)
-    
+
     # Drop all tables and recreate
     import backend.core.database as db
-    
+
     if db._engine:
         db.Base.metadata.drop_all(db._engine)
         db.Base.metadata.create_all(db._engine)
@@ -48,7 +48,7 @@ def reset_qdrant(force: bool):
     """Drop and recreate Qdrant collections."""
     print("[IcBerg] Resetting Qdrant vector store...")
     qdrant = QdrantManager()
-    
+
     if not qdrant.is_healthy():
         print("  [ERROR] Could not connect to Qdrant. Check URL/API Key.")
         return
@@ -66,7 +66,7 @@ def reset_qdrant(force: bool):
             print(f"  [DEL] Deleted collection: {col}")
         else:
             print(f"  [INFO] Collection {col} did not exist.")
-            
+
     # _ensure_collections creates missing ones
     qdrant._ensure_collections()
     print("  [OK] Qdrant collections recreated.")
@@ -82,11 +82,11 @@ def main():
     load_dotenv(project_root / ".env")
 
     print("\n[WARN] WARNING: Database Reset [WARN]\n")
-    
+
     if args.only in ["sqlite", None]:
         reset_sqlite(args.force)
         print("")
-        
+
     if args.only in ["qdrant", None]:
         reset_qdrant(args.force)
         print("")

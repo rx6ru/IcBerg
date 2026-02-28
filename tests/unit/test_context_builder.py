@@ -1,12 +1,13 @@
 """Unit tests for context assembly."""
 
-import pytest
-from unittest.mock import MagicMock, patch
 from datetime import datetime
+from unittest.mock import MagicMock, patch
 
-from backend.core.context_builder import build_context, ContextBundle, _estimate_tokens
-from backend.core.qdrant_manager import CacheResult
+import pytest
+
 from backend.api.schemas import MessageRecord
+from backend.core.context_builder import _estimate_tokens, build_context
+from backend.core.qdrant_manager import CacheResult
 
 
 @pytest.fixture

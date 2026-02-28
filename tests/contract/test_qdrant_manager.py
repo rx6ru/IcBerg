@@ -1,7 +1,8 @@
 """Contract tests for the Qdrant vector store manager (mocked client)."""
 
 import pytest
-from backend.core.qdrant_manager import QdrantManager, CacheResult
+
+from backend.core.qdrant_manager import QdrantManager
 
 
 @pytest.fixture
@@ -38,8 +39,9 @@ class TestInit:
 class TestSearchCache:
 
     def test_miss_below_threshold(self, manager, mock_qdrant):
-        from qdrant_client.http.models import ScoredPoint
         from unittest.mock import MagicMock
+
+        from qdrant_client.http.models import ScoredPoint
         response = MagicMock()
         response.points = [
             ScoredPoint(id=1, version=1, score=0.5, payload={"result": "data"}, vector=None)
@@ -50,8 +52,9 @@ class TestSearchCache:
         assert result.score == 0.5
 
     def test_hit_above_threshold(self, manager, mock_qdrant):
-        from qdrant_client.http.models import ScoredPoint
         from unittest.mock import MagicMock
+
+        from qdrant_client.http.models import ScoredPoint
         response = MagicMock()
         response.points = [
             ScoredPoint(id=1, version=1, score=0.95, payload={"result": "data"}, vector=None)
@@ -83,8 +86,9 @@ class TestUpsertCache:
 class TestSearchHistory:
 
     def test_filters_by_session(self, manager, mock_qdrant):
-        from qdrant_client.http.models import ScoredPoint
         from unittest.mock import MagicMock
+
+        from qdrant_client.http.models import ScoredPoint
         response = MagicMock()
         response.points = [
             ScoredPoint(id=1, version=1, score=0.8, payload={"role": "user", "content": "hi"}, vector=None)

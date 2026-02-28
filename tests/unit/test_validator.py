@@ -1,7 +1,6 @@
 """Tests for the AST code validator."""
 
-import pytest
-from backend.core.validator import validate_generated_code, ValidationResult
+from backend.core.validator import ValidationResult, validate_generated_code
 
 
 class TestDangerousImports:

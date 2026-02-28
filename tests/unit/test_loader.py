@@ -1,7 +1,5 @@
 """Tests for the data loader and feature engineering pipeline."""
 
-import pandas as pd
-import pytest
 
 from backend.data.loader import (
     assign_age_group,

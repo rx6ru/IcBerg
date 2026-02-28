@@ -102,7 +102,7 @@ def _check_dangerous_calls(node: ast.AST, violations: list[str]) -> None:
     """Reject direct calls to dangerous builtins (exec, eval, open, etc.)."""
     if isinstance(node, ast.Name):
         if node.id == "__builtins__":
-            violations.append(f"Blocked access to: '__builtins__' - dangerous operation")
+            violations.append("Blocked access to: '__builtins__' - dangerous operation")
 
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
         if node.func.id in DANGEROUS_BUILTINS:

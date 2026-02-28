@@ -1,7 +1,8 @@
 """Contract tests for Gemini embeddings (mocked SDK)."""
 
 import pytest
-from backend.core.embeddings import embed_text, EmbeddingError
+
+from backend.core.embeddings import EmbeddingError, embed_text
 
 
 @pytest.fixture
