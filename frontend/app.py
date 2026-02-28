@@ -67,6 +67,13 @@ def init_session():
         st.session_state.messages = []
     if "history_loaded" not in st.session_state:
         st.session_state.history_loaded = False
+    if "api_online" not in st.session_state:
+        st.session_state.api_online = False
+        # Proactive ping on first visit to wake up Render cold-starts
+        try:
+            requests.get(HEALTH_ENDPOINT, timeout=1)
+        except requests.RequestException:
+            pass
 
 
 def restore_history():
@@ -230,24 +237,47 @@ def main():
     st.title("IcBerg")
     st.caption("Conversational analysis of the Titanic passenger dataset")
 
+    if not st.session_state.get("api_online", False):
+        st.warning("[WARN] The IcBerg API is currently offline or waking up. Please wait ~30s if you are seeing this for the first time.")
+
     # Sidebar
     with st.sidebar:
         st.markdown("### Session Info")
         st.code(st.session_state.session_id, language=None)
 
         # Health check
-        try:
-            health = requests.get(HEALTH_ENDPOINT, timeout=3).json()
-            status = health.get("status", "unknown")
-            if status == "healthy":
-                st.markdown('<span class="status-badge status-ok">* API Healthy</span>',
+        with st.container():
+            try:
+                # Cache-busting health check
+                health_resp = requests.get(f"{HEALTH_ENDPOINT}?t={time.time()}", timeout=3)
+                health = health_resp.json()
+                status_val = health.get("status", "unknown")
+                
+                if status_val == "healthy":
+                    st.markdown('<span class="status-badge status-ok">* API Healthy</span>',
+                                unsafe_allow_html=True)
+                    st.session_state.api_online = True
+                else:
+                    st.markdown('<span class="status-badge status-err">* API Degraded</span>',
+                                unsafe_allow_html=True)
+                    st.session_state.api_online = False
+            except requests.RequestException:
+                st.markdown('<span class="status-badge status-err">* API Offline</span>',
                             unsafe_allow_html=True)
-            else:
-                st.markdown('<span class="status-badge status-err">* API Degraded</span>',
-                            unsafe_allow_html=True)
-        except requests.RequestException:
-            st.markdown('<span class="status-badge status-err">* API Offline</span>',
-                        unsafe_allow_html=True)
+                st.session_state.api_online = False
+                st.info("[INFO] Backend may be sleeping (Render Free Tier).")
+                
+                # Auto-ping logic: if offline, try a quick auto-refresh after 5 seconds
+                if "last_ping" not in st.session_state or time.time() - st.session_state.last_ping > 10:
+                    st.session_state.last_ping = time.time()
+                    with st.status("[SYS] Waking up backend...", expanded=False):
+                        st.write("Sending wake-up ping...")
+                        st.write("Waiting 5 seconds for cold-start...")
+                        time.sleep(5)
+                    st.rerun()
+
+        if st.button("Check Connection", use_container_width=True):
+            st.rerun()
 
         st.divider()
         st.markdown("### About")
