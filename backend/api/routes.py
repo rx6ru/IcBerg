@@ -80,15 +80,15 @@ def chat(request: ChatRequest, req: Request):
     if context and context.cache_type_hit == "execution":
         cache_context = (
             f"CACHED DATA: {context.cached_execution}\n"
-            "CRITICAL: Compare the cached 'query' to the user's CURRENT question. "
-            "If demographics, columns, filters, or conditions differ in ANY way, "
-            "IGNORE this cache entirely and use query_data to compute fresh results."
+            "MANDATORY: You have been provided CACHED DATA. You must use this data "
+            "to generate your response. DO NOT invoke query_data or visualize_data."
         )
     elif context and context.cache_type_hit == "visualization":
         cache_context = (
-            "A CHART was previously generated for a similar query. "
-            "If the user's current question matches the cached chart's intent exactly, "
-            "explain it and skip visualize_data. Otherwise, generate a new chart."
+            "CACHED CHART AVAILABLE. The chart has already been rendered and will be sent to the user.\n"
+            f"Previous explanation: {context.cached_visualization_text}\n"
+            "MANDATORY: Rephrase this explanation to answer the current query. "
+            "DO NOT invoke query_data or visualize_data."
         )
 
     # Invoke the agent with conversation history for multi-turn memory
@@ -118,6 +118,10 @@ def chat(request: ChatRequest, req: Request):
     text, output_result = _output_guard.check(text)
     guardrail_triggered = not output_result.passed
 
+    # Check if we should inject cached image
+    if context and context.cache_type_hit == "visualization" and context.cached_visualization:
+        image_base64 = context.cached_visualization
+
     # Persist messages
     try:
         save_message(session_id, "user", message)
@@ -140,6 +144,7 @@ def chat(request: ChatRequest, req: Request):
                 if image_base64:
                     qdrant.upsert_cache("visualization_cache", embedding, {
                         "image_base64": image_base64,
+                        "text": text,
                         "query": message,
                     })
                 elif tools_called:
@@ -209,15 +214,15 @@ def chat_stream(request: ChatRequest, req: Request):
     if context and context.cache_type_hit == "execution":
         cache_context = (
             f"CACHED DATA: {context.cached_execution}\n"
-            "CRITICAL: Compare the cached 'query' to the user's CURRENT question. "
-            "If demographics, columns, filters, or conditions differ in ANY way, "
-            "IGNORE this cache entirely and use query_data to compute fresh results."
+            "MANDATORY: You have been provided CACHED DATA. You must use this data "
+            "to generate your response. DO NOT invoke query_data or visualize_data."
         )
     elif context and context.cache_type_hit == "visualization":
         cache_context = (
-            "A CHART was previously generated for a similar query. "
-            "If the user's current question matches the cached chart's intent exactly, "
-            "explain it and skip visualize_data. Otherwise, generate a new chart."
+            "CACHED CHART AVAILABLE. The chart has already been rendered and will be sent to the user.\n"
+            f"Previous explanation: {context.cached_visualization_text}\n"
+            "MANDATORY: Rephrase this explanation to answer the current query. "
+            "DO NOT invoke query_data or visualize_data."
         )
 
     def generate_events():
@@ -241,6 +246,9 @@ def chat_stream(request: ChatRequest, req: Request):
 
             final_ai_text = ""
             image_base64 = None
+            if context and context.cache_type_hit == "visualization" and context.cached_visualization:
+                image_base64 = context.cached_visualization
+            
             tools_called = []
             trace_steps = []
 
@@ -306,7 +314,11 @@ def chat_stream(request: ChatRequest, req: Request):
                     })
                     if context and context.cache_type_hit == "none":
                         if image_base64:
-                            qdrant.upsert_cache("visualization_cache", embedding, {"image_base64": image_base64, "query": message})
+                            qdrant.upsert_cache("visualization_cache", embedding, {
+                                "image_base64": image_base64, 
+                                "text": validated_text, 
+                                "query": message
+                            })
                         elif tools_called:
                             qdrant.upsert_cache("execution_cache", embedding, {"result": validated_text, "query": message})
                 except Exception as e:

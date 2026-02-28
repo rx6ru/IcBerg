@@ -43,6 +43,7 @@ class ContextBundle:
     semantic_messages: list[dict] = field(default_factory=list)
     cached_execution: dict | None = None
     cached_visualization: str | None = None
+    cached_visualization_text: str | None = None
     cache_type_hit: str = "none"
 
 
@@ -104,6 +105,7 @@ def build_context(
     viz_result = results.get("viz_cache")
     if viz_result and viz_result.hit and bundle.cache_type_hit == "none":
         bundle.cached_visualization = viz_result.payload.get("image_base64") if viz_result.payload else None
+        bundle.cached_visualization_text = viz_result.payload.get("text") if viz_result.payload else None
         bundle.cache_type_hit = "visualization"
         logger.info("context.cache_hit", type="visualization", score=viz_result.score)
 
