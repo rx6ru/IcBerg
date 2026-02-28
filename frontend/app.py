@@ -69,6 +69,7 @@ def init_session():
         st.session_state.history_loaded = False
     if "api_online" not in st.session_state:
         st.session_state.api_online = False
+        st.session_state.retry_count = 0
         # Proactive ping on first visit to wake up Render cold-starts
         try:
             requests.get(HEALTH_ENDPOINT, timeout=1)
@@ -233,11 +234,24 @@ def main():
     init_session()
     restore_history()
 
+    # 1. Perform Health Check immediately to set state for the rest of the page
+    api_status = "unknown"
+    try:
+        # Cache-busting health check
+        health_resp = requests.get(f"{HEALTH_ENDPOINT}?t={time.time()}", timeout=3)
+        health = health_resp.json()
+        api_status = health.get("status", "unknown")
+        st.session_state.api_online = (api_status == "healthy")
+    except requests.RequestException:
+        st.session_state.api_online = False
+        api_status = "offline"
+
     # Header
     st.title("IcBerg")
     st.caption("Conversational analysis of the Titanic passenger dataset")
 
-    if not st.session_state.get("api_online", False):
+    # 2. Show/Hide warning based on immediate health check
+    if not st.session_state.api_online:
         st.warning("[WARN] The IcBerg API is currently offline or waking up. Please wait ~30s if you are seeing this for the first time.")
 
     # Sidebar
@@ -245,36 +259,35 @@ def main():
         st.markdown("### Session Info")
         st.code(st.session_state.session_id, language=None)
 
-        # Health check
+        # 3. Display Health Status in sidebar using the pre-calculated state
         with st.container():
-            try:
-                # Cache-busting health check
-                health_resp = requests.get(f"{HEALTH_ENDPOINT}?t={time.time()}", timeout=3)
-                health = health_resp.json()
-                status_val = health.get("status", "unknown")
-                
-                if status_val == "healthy":
-                    st.markdown('<span class="status-badge status-ok">* API Healthy</span>',
-                                unsafe_allow_html=True)
-                    st.session_state.api_online = True
-                else:
-                    st.markdown('<span class="status-badge status-err">* API Degraded</span>',
-                                unsafe_allow_html=True)
-                    st.session_state.api_online = False
-            except requests.RequestException:
+            if st.session_state.api_online:
+                st.markdown('<span class="status-badge status-ok">* API Healthy</span>',
+                            unsafe_allow_html=True)
+                st.session_state.retry_count = 0  # Reset on success
+            elif api_status == "degraded":
+                st.markdown('<span class="status-badge status-err">* API Degraded</span>',
+                            unsafe_allow_html=True)
+            else:
                 st.markdown('<span class="status-badge status-err">* API Offline</span>',
                             unsafe_allow_html=True)
-                st.session_state.api_online = False
                 st.info("[INFO] Backend may be sleeping (Render Free Tier).")
                 
-                # Auto-ping logic: if offline, try a quick auto-refresh after 5 seconds
-                if "last_ping" not in st.session_state or time.time() - st.session_state.last_ping > 10:
-                    st.session_state.last_ping = time.time()
-                    with st.status("[SYS] Waking up backend...", expanded=False):
-                        st.write("Sending wake-up ping...")
-                        st.write("Waiting 5 seconds for cold-start...")
-                        time.sleep(5)
-                    st.rerun()
+                # Sustainable Auto-ping logic: cap at 6 attempts (~1 min)
+                if "retry_count" not in st.session_state:
+                    st.session_state.retry_count = 0
+                
+                if st.session_state.retry_count < 6:
+                    if "last_ping" not in st.session_state or time.time() - st.session_state.last_ping > 12:
+                        st.session_state.last_ping = time.time()
+                        st.session_state.retry_count += 1
+                        with st.status(f"[SYS] Waking up backend (Attempt {st.session_state.retry_count}/6)...", expanded=False):
+                            st.write("Sending wake-up ping...")
+                            st.write("Waiting 10 seconds for cold-start...")
+                            time.sleep(10)
+                        st.rerun()
+                else:
+                    st.error("[ERROR] Backend failed to wake up after multiple attempts. Please check the logs or try manual refresh.")
 
         if st.button("Check Connection", use_container_width=True):
             st.rerun()
