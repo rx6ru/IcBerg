@@ -1,8 +1,9 @@
 """Contract tests for the LLM adapter (mocked, no real API calls)."""
 
 import os
+
 import pytest
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from backend.core.llm_adapter import LLMAdapter, LLMError, LLMUnavailableError
 
@@ -23,15 +24,26 @@ class TestLLMAdapterInit:
         assert adapter.cerebras_key == "test-cerebras-key"
         assert adapter.groq_key == "test-groq-key"
 
-    def test_primary_is_cerebras(self, adapter):
+    def test_round_robin_selection(self, adapter):
         from langchain_cerebras import ChatCerebras
+        from langchain_groq import ChatGroq
         from langchain_core.runnables import RunnableWithFallbacks
-        model = adapter.get_chat_model()
-        assert isinstance(model, RunnableWithFallbacks)
-        assert isinstance(model.runnable, ChatCerebras)
-        assert model.runnable.model == "test-cerebras-model"
-        assert model.runnable.temperature == 0.0
-        assert model.runnable.max_tokens == 2048
+        
+        # Call 1
+        model1 = adapter.get_chat_model()
+        assert isinstance(model1, RunnableWithFallbacks)
+        
+        # Call 2
+        model2 = adapter.get_chat_model()
+        assert isinstance(model2, RunnableWithFallbacks)
+        
+        # Check that they alternated between Cerebras and Groq
+        types = {type(model1.runnable), type(model2.runnable)}
+        assert types == {ChatCerebras, ChatGroq}
+        
+        # Check max tokens is configured correctly for both
+        assert model1.runnable.max_tokens == 2048
+        assert model2.runnable.max_tokens == 2048
 
 
 class TestLLMFailover:

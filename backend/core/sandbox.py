@@ -40,6 +40,7 @@ class ExecutionResult:
 
 
 import builtins
+
 from backend.core.validator import ALLOWED_IMPORT_ROOTS
 
 RETRYABLE_ERRORS = (KeyError, TypeError, ValueError, AttributeError, IndexError, ZeroDivisionError)
@@ -128,20 +129,24 @@ _IPC_OUTPUT_LIMIT = 100_000
 
 
 def _worker(code: str, df: pd.DataFrame, result_queue: multiprocessing.Queue,
-            headroom_mb: int) -> None:
+            headroom_mb: int, timeout_sec: int) -> None:
     """Child process worker - applies memory limit and executes code.
 
     This function runs in a completely isolated process. If it crashes
     (OOM, segfault), only this child process dies.
     """
-    # Apply memory limit: current footprint + headroom
+    # Apply CPU and memory limits
     try:
+        # Prevent CPU exhaustion attack (spin loop)
+        resource.setrlimit(resource.RLIMIT_CPU, (timeout_sec, timeout_sec))
+        
+        # Apply memory limit: current footprint + headroom
         current_vm = _get_current_vm_bytes()
         headroom_bytes = headroom_mb * 1024 * 1024
         limit = current_vm + headroom_bytes if current_vm > 0 else headroom_bytes
         resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
     except (ValueError, resource.error):
-        pass  # Non-fatal: some systems don't support RLIMIT_AS
+        pass  # Non-fatal: some systems don't support RLIMIT
 
     df_copy = df.copy()
     exec_globals: dict[str, Any] = {"__builtins__": SAFE_BUILTINS}
@@ -222,7 +227,7 @@ def execute_code(code: str, df: pd.DataFrame, timeout: int = 5) -> ExecutionResu
 
     worker = multiprocessing.Process(
         target=_worker,
-        args=(code, df, result_queue, SANDBOX_HEADROOM_MB),
+        args=(code, df, result_queue, SANDBOX_HEADROOM_MB, timeout),
         daemon=True,
     )
     worker.start()
@@ -246,8 +251,10 @@ def execute_code(code: str, df: pd.DataFrame, timeout: int = 5) -> ExecutionResu
         # Process was killed (OOM, segfault, etc.)
         if worker.exitcode == -9:  # SIGKILL (OOM killer)
             error_msg = "Process killed: memory limit exceeded (OOM)"
+        elif worker.exitcode == -24:  # SIGXCPU
+            error_msg = f"Process killed: CPU time limit exceeded ({timeout}s)"
         elif worker.exitcode and worker.exitcode < 0:
-            error_msg = f"Process crashed with signal {-worker.exitcode}"
+            error_msg = f"Process killed by signal {-worker.exitcode}"
         else:
             error_msg = f"Process exited with code {worker.exitcode}"
         return ExecutionResult(

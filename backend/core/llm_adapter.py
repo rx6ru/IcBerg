@@ -51,6 +51,7 @@ class LLMAdapter:
                     temperature=self.temperature,
                     max_tokens=self.max_tokens,
                     timeout=self.timeout,
+                    max_retries=3,
                 )
             except Exception as e:
                 logger.error("llm.cerebras_init_failed", error=str(e))
@@ -65,6 +66,7 @@ class LLMAdapter:
                     temperature=self.temperature,
                     max_tokens=self.max_tokens,
                     timeout=self.timeout,
+                    max_retries=3,
                 )
             except Exception as e:
                 logger.error("llm.groq_init_failed", error=str(e))
@@ -72,7 +74,7 @@ class LLMAdapter:
             logger.warning("llm.no_groq_key")
 
     def get_chat_model(self) -> BaseChatModel:
-        """Return the best available model, with fallback if both keys exist.
+        """Return the next available model in a round-robin fashion, with cross-fallback.
 
         Returns:
             A BaseChatModel (or RunnableWithFallbacks if both providers available).
@@ -81,7 +83,14 @@ class LLMAdapter:
             LLMUnavailableError: If no API keys are configured.
         """
         if self.primary_llm and self.fallback_llm:
-            return self.primary_llm.with_fallbacks([self.fallback_llm])
+            # Alternate primary and fallback to distribute load evenly
+            self._index = (getattr(self, "_index", 0) + 1) % 2
+            if self._index == 0:
+                logger.debug("llm.round_robin", active="cerebras", fallback="groq")
+                return self.primary_llm.with_fallbacks([self.fallback_llm])
+            else:
+                logger.debug("llm.round_robin", active="groq", fallback="cerebras")
+                return self.fallback_llm.with_fallbacks([self.primary_llm])
         if self.primary_llm:
             return self.primary_llm
         if self.fallback_llm:

@@ -14,12 +14,10 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from backend.agent.prompts import build_system_prompt
 from backend.api.schemas import (
     ChatRequest,
     ChatResponse,
     HistoryResponse,
-    MessageRecord,
 )
 from backend.core.context_builder import build_context
 from backend.core.database import get_session_history, save_message
@@ -42,7 +40,12 @@ def chat(request: ChatRequest, req: Request):
 
     logger.info("chat.request", session_id=session_id, msg_len=len(message))
 
-    agent = req.app.state.agent
+    try:
+        from backend.agent.agent import create_agent
+        agent = create_agent(req.app.state.llm_adapter, req.app.state.df)
+    except Exception as e:
+        logger.error("chat.agent_creation_failed", error=str(e))
+        agent = None
     qdrant = req.app.state.qdrant
     schema_info = req.app.state.schema_info
 
@@ -111,7 +114,10 @@ def chat(request: ChatRequest, req: Request):
         result = agent.invoke(agent_input, config=config)
     except Exception as e:
         logger.error("chat.agent_failed", error=str(e))
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again in a moment.")
+        raise HTTPException(
+            status_code=503,
+            detail="All AI providers are currently experiencing high traffic. Please try again in 30 seconds."
+        )
 
     # Extract response and run output guardrail
     text, image_base64, tools_called, trace = _extract_response(result)
@@ -181,7 +187,12 @@ def chat_stream(request: ChatRequest, req: Request):
 
     logger.info("chat_stream.request", session_id=session_id, msg_len=len(message))
 
-    agent = req.app.state.agent
+    try:
+        from backend.agent.agent import create_agent
+        agent = create_agent(req.app.state.llm_adapter, req.app.state.df)
+    except Exception as e:
+        logger.error("chat_stream.agent_creation_failed", error=str(e))
+        agent = None
     qdrant = req.app.state.qdrant
     schema_info = req.app.state.schema_info
 
@@ -214,20 +225,25 @@ def chat_stream(request: ChatRequest, req: Request):
     if context and context.cache_type_hit == "execution":
         cache_context = (
             f"CACHED DATA: {context.cached_execution}\n"
-            "MANDATORY: You have been provided CACHED DATA. You must use this data "
-            "to generate your response. DO NOT invoke query_data or visualize_data."
+            "MANDATORY CACHE BEHAVIOR: First, compare the user's intent against the context of this CACHED DATA. "
+            "If the user is asking about different demographics, columns, or logical conditions (e.g. 'men' vs 'women', '1st class' vs '3rd class'), "
+            "YOU MUST IGNORE THIS CACHE and invoke query_data or visualize_data to get the correct data. "
+            "Otherwise, you MUST REPHRASE this cached explanation and DO NOT invoke tools."
         )
     elif context and context.cache_type_hit == "visualization":
         cache_context = (
             "CACHED CHART AVAILABLE. The chart has already been rendered and will be sent to the user.\n"
             f"Previous explanation: {context.cached_visualization_text}\n"
-            "MANDATORY: Rephrase this explanation to answer the current query. "
-            "DO NOT invoke query_data or visualize_data."
+            "MANDATORY CACHE BEHAVIOR: First, compare the user's intent against the context of this CACHED DATA. "
+            "If the user is asking about different demographics or conditions, "
+            "YOU MUST IGNORE THIS CACHE and invoke visualize_data to get the correct chart. "
+            "Otherwise, you MUST REPHRASE this cached explanation and DO NOT invoke tools."
         )
+
 
     def generate_events():
         yield f"data: {json.dumps({'type': 'start', 'content': 'Analyzing query...'})}\n\n"
-        
+
         try:
             messages = []
             if cache_context != "No cached data available.":
@@ -248,7 +264,7 @@ def chat_stream(request: ChatRequest, req: Request):
             image_base64 = None
             if context and context.cache_type_hit == "visualization" and context.cached_visualization:
                 image_base64 = context.cached_visualization
-            
+
             tools_called = []
             trace_steps = []
 
@@ -274,10 +290,10 @@ def chat_stream(request: ChatRequest, req: Request):
                         name = getattr(msg, "name", "unknown")
                         content = msg.content or ""
                         trace_steps.append({"type": "tool_result", "tool": name, "output_preview": content[:200]})
-                        
+
                         if content.startswith("BASE64:") and not image_base64:
                             image_base64 = content[7:]
-                        
+
                         yield f"data: {json.dumps({'type': 'tool_end', 'name': name})}\n\n"
 
             # ---------------------------------------------------------
@@ -315,8 +331,8 @@ def chat_stream(request: ChatRequest, req: Request):
                     if context and context.cache_type_hit == "none":
                         if image_base64:
                             qdrant.upsert_cache("visualization_cache", embedding, {
-                                "image_base64": image_base64, 
-                                "text": validated_text, 
+                                "image_base64": image_base64,
+                                "text": validated_text,
                                 "query": message
                             })
                         elif tools_called:
@@ -335,7 +351,7 @@ def chat_stream(request: ChatRequest, req: Request):
 
         except Exception as e:
             logger.error("chat_stream.agent_failed", error=str(e))
-            yield f"data: {json.dumps({'type': 'final_text', 'content': 'Service temporarily unavailable. Please try again in a moment.'})}\n\n"
+            yield f"data: {json.dumps({'type': 'final_text', 'content': 'All AI providers are currently experiencing high traffic. Please try again in 30 seconds.'})}\n\n"
 
     return StreamingResponse(generate_events(), media_type="text/event-stream")
 
