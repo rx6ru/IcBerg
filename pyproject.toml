@@ -37,6 +37,7 @@ dependencies = [
 
     # Database
     "sqlalchemy>=2.0.40",
+    "sqlglot>=25.0.0",
 
     # Logging
     "structlog>=25.5.0",
