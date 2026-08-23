@@ -1,0 +1,45 @@
+# Version control / CI
+.git
+.gitignore
+.github
+
+# Python environments & caches
+.venv
+venv
+__pycache__
+**/__pycache__
+*.py[cod]
+*.egg-info
+**/*.egg-info
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Tests — not needed inside the runtime image
+tests/
+test_*.py
+**/test_*.py
+
+# Internal/dev-only docs and design notes
+.devdocs/
+
+# Data files / local databases / caches — not part of the image; the gateway's own
+# SQLite/audit/approvals files are created at runtime under /data (see Dockerfile)
+data/
+backend/data/
+*.sqlite
+*.sqlite3
+*.db
+
+# Local env files (never bake secrets into the image)
+.env
+.env.*
+
+# Not needed by the gateway image (separate process / not copied by the Dockerfile)
+frontend/
+examples/
+scripts/
+
+# Packaging inputs themselves — irrelevant once inside the build context
+docker-compose.yml
+uv.lock

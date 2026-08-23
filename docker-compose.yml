@@ -1,30 +1,64 @@
+# IcBerg governance gateway — self-hostable service. `docker compose up --build`
+# starts the gateway (SQLite-backed by default, no external database required) plus a
+# demo Postgres instance you can point the gateway at to exercise the Postgres
+# connector.
+#
+# Environment variables read by the `icberg` service (see backend/gateway_app.py and
+# Dockerfile):
+#   ICBERG_GATEWAY_DB_PATH             DSN for the governed database: a SQLite path/URI
+#                                       (default: /data/icberg.sqlite, persisted in the
+#                                       icberg_data volume below), postgres://..., or
+#                                       mysql://... . Pointing this at the postgres
+#                                       service below (e.g.
+#                                       postgres://icberg:icberg@postgres:5432/icberg_demo)
+#                                       additionally requires a Postgres driver
+#                                       (psycopg) installed in the image, which is not
+#                                       included by default — see THREAT_MODEL.md's
+#                                       Postgres residual-risk notes.
+#   ICBERG_GATEWAY_RATE_LIMIT_PER_MIN  Per-actor request cap (default: 60).
+#
+# Environment variables read by the `postgres` service (standard Postgres image vars):
+#   POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB
 services:
-  backend:
-    build: ./backend
+  icberg:
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
-    env_file: .env
+      - "${ICBERG_PORT:-8000}:8000"
+    environment:
+      ICBERG_GATEWAY_DB_PATH: ${ICBERG_GATEWAY_DB_PATH:-/data/icberg.sqlite}
+      ICBERG_GATEWAY_RATE_LIMIT_PER_MIN: ${ICBERG_GATEWAY_RATE_LIMIT_PER_MIN:-60}
     volumes:
-      - ./backend/data:/app/backend/data
-      - sqlite_data:/app/db
+      - icberg_data:/data
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 10s
     restart: unless-stopped
 
-  frontend:
-    build: ./frontend
-    ports:
-      - "${FRONTEND_PORT:-8501}:8501"
+  # Demo database for exercising IcBerg's Postgres connector. Not wired as the icberg
+  # service's default DSN (see ICBERG_GATEWAY_DB_PATH above) — point the gateway at it
+  # explicitly once a Postgres driver is available in the image.
+  postgres:
+    image: postgres:16-alpine
     environment:
-      - API_URL=http://backend:8000
-    depends_on:
-      backend:
-        condition: service_healthy
+      POSTGRES_USER: ${POSTGRES_USER:-icberg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-icberg}
+      POSTGRES_DB: ${POSTGRES_DB:-icberg_demo}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-icberg}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 volumes:
-  sqlite_data:
+  icberg_data:
+  postgres_data:

@@ -10,3 +10,33 @@ uv.lock
 .devdocs/
 *.egg-info/
 icberg.egg-info/
+
+# Databases & runtime artifacts (never commit local/demo/audit DBs)
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Audit log external anchor + generated demo data
+*.anchor
+*_anchor.json
+audit_anchor*
+data/*.db
+data/*.sqlite*
+
+# Tooling caches / coverage
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+coverage.xml
+
+# Secrets (belt-and-suspenders; .env already above)
+*.key
+*.pem
+.env.*
+!.env.example
