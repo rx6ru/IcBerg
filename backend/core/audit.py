@@ -61,6 +61,7 @@ import os
 import secrets
 import sqlite3
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -164,9 +165,25 @@ class AuditLog:
         anchor_path: str | None = None,
     ) -> None:
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+        # A per-instance lock guarding EVERY access to `self.conn` (and, in `append`,
+        # the external anchor-file write in the same critical section) — see H1 in the
+        # module docstring's threat-model history. `check_same_thread=False` below only
+        # lifts sqlite3's own same-thread *ownership* check so this connection CAN be
+        # handed to a different thread than the one that opened it (needed for a
+        # sync FastAPI route, which Starlette runs in its threadpool); it does NOT make
+        # concurrent use of the SAME connection object from multiple threads safe —
+        # without this lock, two threads racing `append()` could both read the same
+        # `prev_hash`/`seq` before either commits, corrupting the hash chain, or a bare
+        # `sqlite3.Cursor` could be shared across threads and raise `InterfaceError`/
+        # `ProgrammingError`. `RLock` (not `Lock`) so a locked method calling another
+        # locked method on `self` from the same thread (e.g. `append` calling
+        # `_next_seq`/`_last_entry_hash`, or `verify` calling `entries`) re-enters
+        # cleanly instead of deadlocking on itself.
+        self._lock = threading.RLock()
         # `check_same_thread=False`: the gateway may be used from a single-threaded test
         # or from an async/threaded server context; this log does no thread-affinity
-        # tricks of its own, so it doesn't restrict the caller's threading model either.
+        # tricks of its own, so it doesn't restrict the caller's threading model either
+        # — thread-safety for concurrent callers is `self._lock`'s job, not this flag's.
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.execute(
             """
@@ -249,13 +266,14 @@ class AuditLog:
         self.anchor_path = anchor_path
 
     def _load_or_create_salt(self) -> str:
-        row = self.conn.execute("SELECT value FROM audit_meta WHERE key = 'salt'").fetchone()
-        if row:
-            return row[0]
-        salt = secrets.token_hex(16)
-        self.conn.execute("INSERT INTO audit_meta (key, value) VALUES ('salt', ?)", (salt,))
-        self.conn.commit()
-        return salt
+        with self._lock:
+            row = self.conn.execute("SELECT value FROM audit_meta WHERE key = 'salt'").fetchone()
+            if row:
+                return row[0]
+            salt = secrets.token_hex(16)
+            self.conn.execute("INSERT INTO audit_meta (key, value) VALUES ('salt', ?)", (salt,))
+            self.conn.commit()
+            return salt
 
     def hash_result(self, rows: list[dict[str, Any]]) -> str:
         """Salted `hash_result_rows(rows, self.salt)` — the audit trail's own `result_hash`
@@ -265,19 +283,22 @@ class AuditLog:
         return hash_result_rows(rows, salt=self.salt)
 
     def _read_anchor(self) -> tuple[int, str] | None:
-        try:
-            with open(self.anchor_path, encoding="utf-8") as f:
-                data = json.load(f)
-            return int(data["seq"]), str(data["entry_hash"])
-        except (OSError, ValueError, KeyError, TypeError):
-            return None
+        with self._lock:
+            try:
+                with open(self.anchor_path, encoding="utf-8") as f:
+                    data = json.load(f)
+                return int(data["seq"]), str(data["entry_hash"])
+            except (OSError, ValueError, KeyError, TypeError):
+                return None
 
     def _write_anchor(self, seq: int, entry_hash: str) -> None:
         """Write `{seq, entry_hash}` to `self.anchor_path`, outside the SQLite table
         entirely — this is what lets `verify()` detect a full, internally-self-consistent
         chain rewrite (see module docstring point 2). Written via a temp-file-then-
         `os.replace` swap so a crash mid-write can never leave a half-written, unparseable
-        anchor file behind.
+        anchor file behind. Callers must already hold `self._lock` (this is only ever
+        invoked from `append`, inside its own `with self._lock:` block) so the anchor
+        write is part of the SAME atomic critical section as the row insert/commit.
         """
         payload = json.dumps({"seq": seq, "entry_hash": entry_hash})
         tmp_path = f"{self.anchor_path}.tmp"
@@ -286,12 +307,23 @@ class AuditLog:
         os.replace(tmp_path, self.anchor_path)
 
     def _last_entry_hash(self) -> str:
-        row = self.conn.execute("SELECT entry_hash FROM audit_log ORDER BY seq DESC LIMIT 1").fetchone()
-        return row[0] if row else GENESIS_HASH
+        with self._lock:
+            row = self.conn.execute("SELECT entry_hash FROM audit_log ORDER BY seq DESC LIMIT 1").fetchone()
+            return row[0] if row else GENESIS_HASH
 
     def _next_seq(self) -> int:
-        row = self.conn.execute("SELECT MAX(seq) FROM audit_log").fetchone()
-        return (row[0] or 0) + 1
+        with self._lock:
+            row = self.conn.execute("SELECT MAX(seq) FROM audit_log").fetchone()
+            return (row[0] or 0) + 1
+
+    def ping(self) -> None:
+        """Thread-safe connectivity check for `GET /health` (`gateway_routes.health`) —
+        that route MUST call this rather than touching `self.conn` directly, so the
+        health probe is guarded by the same lock as every other access to this
+        connection instead of racing a concurrent `append()`/`verify()`.
+        """
+        with self._lock:
+            self.conn.execute("SELECT 1")
 
     def append(
         self,
@@ -316,64 +348,77 @@ class AuditLog:
         statement (`WHERE email='alice@example.com'`) never persists raw at rest. This
         happens unconditionally, inside this single write path, specifically so it can't
         be forgotten by a caller that constructs an entry some other way.
+
+        H1 (thread-safety): reading `prev_hash`/`seq`, computing `entry_hash`, inserting
+        the row, committing, AND writing the external anchor all happen inside ONE
+        acquisition of `self._lock` below — not four separate locked calls. If they were
+        separate, two concurrent callers could both read the same `prev_hash`/`seq`
+        between their own read and write, both compute a chain-consistent-looking entry
+        against the SAME predecessor, and corrupt the chain (two entries claiming the
+        same `prev_hash`, or a duplicate `seq`) even though neither call individually
+        raised. Holding the lock across the whole read-compute-write sequence is what
+        makes `append()` atomic with respect to itself.
         """
-        seq = self._next_seq()
-        prev_hash = self._last_entry_hash()
-        timestamp = self._clock().isoformat()
         proposed_sql = redact_text(proposed_sql)
 
-        base_fields: dict[str, Any] = {
-            "seq": seq,
-            "timestamp": timestamp,
-            "actor": actor,
-            "proposed_sql": proposed_sql,
-            "classification": classification,
-            "action": action,
-            "matched_rules": list(matched_rules),
-            "rows_returned": rows_returned,
-            "latency_ms": latency_ms,
-            "result_hash": result_hash,
-            "prev_hash": prev_hash,
-        }
-        entry_hash = _compute_entry_hash(base_fields)
-        entry = AuditEntry(**base_fields, entry_hash=entry_hash)
+        with self._lock:
+            seq = self._next_seq()
+            prev_hash = self._last_entry_hash()
+            timestamp = self._clock().isoformat()
 
-        self.conn.execute(
-            """
-            INSERT INTO audit_log
-                (seq, timestamp, actor, proposed_sql, classification, action, matched_rules,
-                 rows_returned, latency_ms, result_hash, prev_hash, entry_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                entry.seq,
-                entry.timestamp,
-                entry.actor,
-                entry.proposed_sql,
-                entry.classification,
-                entry.action,
-                json.dumps(entry.matched_rules),
-                entry.rows_returned,
-                entry.latency_ms,
-                entry.result_hash,
-                entry.prev_hash,
-                entry.entry_hash,
-            ),
-        )
-        self.conn.commit()
-        self._write_anchor(entry.seq, entry.entry_hash)
-        logger.info("audit.entry_appended", seq=seq, actor=actor, action=action, classification=classification)
-        return entry
+            base_fields: dict[str, Any] = {
+                "seq": seq,
+                "timestamp": timestamp,
+                "actor": actor,
+                "proposed_sql": proposed_sql,
+                "classification": classification,
+                "action": action,
+                "matched_rules": list(matched_rules),
+                "rows_returned": rows_returned,
+                "latency_ms": latency_ms,
+                "result_hash": result_hash,
+                "prev_hash": prev_hash,
+            }
+            entry_hash = _compute_entry_hash(base_fields)
+            entry = AuditEntry(**base_fields, entry_hash=entry_hash)
+
+            self.conn.execute(
+                """
+                INSERT INTO audit_log
+                    (seq, timestamp, actor, proposed_sql, classification, action, matched_rules,
+                     rows_returned, latency_ms, result_hash, prev_hash, entry_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    entry.seq,
+                    entry.timestamp,
+                    entry.actor,
+                    entry.proposed_sql,
+                    entry.classification,
+                    entry.action,
+                    json.dumps(entry.matched_rules),
+                    entry.rows_returned,
+                    entry.latency_ms,
+                    entry.result_hash,
+                    entry.prev_hash,
+                    entry.entry_hash,
+                ),
+            )
+            self.conn.commit()
+            self._write_anchor(entry.seq, entry.entry_hash)
+            logger.info("audit.entry_appended", seq=seq, actor=actor, action=action, classification=classification)
+            return entry
 
     def entries(self) -> list[AuditEntry]:
         """Every entry in the log, in sequence order."""
-        rows = self.conn.execute(
-            """
-            SELECT seq, timestamp, actor, proposed_sql, classification, action, matched_rules,
-                   rows_returned, latency_ms, result_hash, prev_hash, entry_hash
-            FROM audit_log ORDER BY seq ASC
-            """
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                """
+                SELECT seq, timestamp, actor, proposed_sql, classification, action, matched_rules,
+                       rows_returned, latency_ms, result_hash, prev_hash, entry_hash
+                FROM audit_log ORDER BY seq ASC
+                """
+            ).fetchall()
         return [_row_to_entry(row) for row in rows]
 
     def verify(self) -> tuple[bool, int | None]:
@@ -397,44 +442,50 @@ class AuditLog:
             own sequence number: that entry is the one whose content doesn't match what
             was anchored when it was first appended.
         """
-        expected_prev = GENESIS_HASH
-        last_entry: AuditEntry | None = None
-        for entry in self.entries():
-            if entry.prev_hash != expected_prev:
-                return False, entry.seq
-            recomputed = _compute_entry_hash(
-                {
-                    "seq": entry.seq,
-                    "timestamp": entry.timestamp,
-                    "actor": entry.actor,
-                    "proposed_sql": entry.proposed_sql,
-                    "classification": entry.classification,
-                    "action": entry.action,
-                    "matched_rules": entry.matched_rules,
-                    "rows_returned": entry.rows_returned,
-                    "latency_ms": entry.latency_ms,
-                    "result_hash": entry.result_hash,
-                    "prev_hash": entry.prev_hash,
-                }
-            )
-            if recomputed != entry.entry_hash:
-                return False, entry.seq
-            expected_prev = entry.entry_hash
-            last_entry = entry
-
-        if last_entry is not None:
-            anchor = self._read_anchor()
-            if anchor is None or anchor != (last_entry.seq, last_entry.entry_hash):
-                # Internally self-consistent chain, but its recomputed head disagrees
-                # with the untouched external anchor — exactly the full-rewrite attack
-                # the anchor exists to catch (see module docstring point 2).
-                logger.warning(
-                    "audit.verify_anchor_mismatch",
-                    last_seq=last_entry.seq,
-                    anchor=anchor,
+        # Locked for the whole walk (not just each individual read) so `verify()` sees
+        # a single, consistent snapshot even if a concurrent `append()` is racing it —
+        # otherwise a chain that is perfectly valid before AND after a concurrent
+        # append could be observed mid-append (entries read, anchor not yet re-checked
+        # against the entry that just landed) and misreported.
+        with self._lock:
+            expected_prev = GENESIS_HASH
+            last_entry: AuditEntry | None = None
+            for entry in self.entries():
+                if entry.prev_hash != expected_prev:
+                    return False, entry.seq
+                recomputed = _compute_entry_hash(
+                    {
+                        "seq": entry.seq,
+                        "timestamp": entry.timestamp,
+                        "actor": entry.actor,
+                        "proposed_sql": entry.proposed_sql,
+                        "classification": entry.classification,
+                        "action": entry.action,
+                        "matched_rules": entry.matched_rules,
+                        "rows_returned": entry.rows_returned,
+                        "latency_ms": entry.latency_ms,
+                        "result_hash": entry.result_hash,
+                        "prev_hash": entry.prev_hash,
+                    }
                 )
-                return False, last_entry.seq
-        return True, None
+                if recomputed != entry.entry_hash:
+                    return False, entry.seq
+                expected_prev = entry.entry_hash
+                last_entry = entry
+
+            if last_entry is not None:
+                anchor = self._read_anchor()
+                if anchor is None or anchor != (last_entry.seq, last_entry.entry_hash):
+                    # Internally self-consistent chain, but its recomputed head disagrees
+                    # with the untouched external anchor — exactly the full-rewrite attack
+                    # the anchor exists to catch (see module docstring point 2).
+                    logger.warning(
+                        "audit.verify_anchor_mismatch",
+                        last_seq=last_entry.seq,
+                        anchor=anchor,
+                    )
+                    return False, last_entry.seq
+            return True, None
 
 
 def _row_to_entry(row: tuple[Any, ...]) -> AuditEntry:
