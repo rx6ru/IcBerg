@@ -46,18 +46,15 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
-# Metrics counter keys tracked in `request.app.state.metrics` — initialized by
-# `create_gateway_app` (`backend/gateway_app.py`) and only ever incremented here. Every
-# key is a single bucketed, unlabeled counter — no per-actor/per-query cardinality, no
-# raw SQL — see P2.17 (`.devdocs/PHASE2_GATES.md`) and the `metrics()` handler below.
-_METRIC_KEYS = (
-    "queries_total",
-    "blocks_total",
-    "holds_total",
-    "approvals_total",
-    "rejections_total",
-    "rate_limited_total",
-)
+# Metrics bundle tracked in `request.app.state.gateway_metrics` — one per app instance,
+# built by `create_gateway_app` (`backend/gateway_app.py`) via `telemetry
+# .new_metrics_registry()`. `POST /query`/`/query/stream` never increment it directly:
+# `Gateway.handle` (`backend/core/gateway.py`) records `queries_total`/`blocks_total`/
+# `holds_total` itself, once per call, on every decision path — this module only
+# increments the three counters `handle` has no visibility into (`approvals_total`/
+# `rejections_total` in `decide_approval`, `rate_limited_total` in `_check_rate_limit`).
+# See P2.17 (`.devdocs/PHASE2_GATES.md`) and the `metrics()` handler below for the
+# bucketed-counters-only, no-labels, no-PII contract this has always promised.
 
 
 # --------------------------------------------------------------------------------------
@@ -155,7 +152,7 @@ def _check_rate_limit(request: Request, actor: str) -> None:
     window = [t for t in buckets.get(actor, []) if now - t < 60.0]
     if len(window) >= limit:
         logger.warning("gateway_api.rate_limited", actor=redact_text(actor))
-        request.app.state.metrics["rate_limited_total"] += 1
+        request.app.state.gateway_metrics.record_rate_limited()
         raise HTTPException(status_code=429, detail="rate limit exceeded; try again shortly")
     window.append(now)
     buckets[actor] = window
@@ -186,12 +183,10 @@ def query(body: QueryRequest, request: Request) -> QueryResponse:
     decision = state.gate.evaluate(body.sql, actor=body.actor)
     result = state.gateway.handle(body.sql, body.actor, state.connection.read_executor, state.audit_log)
 
-    state.metrics["queries_total"] += 1
+    # `queries_total`/`blocks_total`/`holds_total` are recorded inside `Gateway.handle`
+    # itself (once per call, on every decision path) — not duplicated here.
     approval_id: str | None = None
-    if result["action"] == "block":
-        state.metrics["blocks_total"] += 1
-    elif result["action"] == "hold":
-        state.metrics["holds_total"] += 1
+    if result["action"] == "hold":
         approval_id = state.approval_queue.enqueue(decision, body.sql, body.actor)
 
     return QueryResponse(
@@ -218,7 +213,9 @@ def query_stream(body: QueryRequest, request: Request) -> StreamingResponse:
 
         decision = state.gate.evaluate(body.sql, actor=body.actor)
         result = state.gateway.handle(body.sql, body.actor, state.connection.read_executor, state.audit_log)
-        state.metrics["queries_total"] += 1
+        # `queries_total`/`blocks_total`/`holds_total` are recorded inside
+        # `Gateway.handle` itself (once per call, on every decision path) — not
+        # duplicated here.
 
         yield _sse("decision", {
             "action": result["action"],
@@ -230,11 +227,9 @@ def query_stream(body: QueryRequest, request: Request) -> StreamingResponse:
         if result["action"] == "allow":
             yield _sse("rows", {"rows": result["rows"]})
         elif result["action"] == "hold":
-            state.metrics["holds_total"] += 1
             approval_id = state.approval_queue.enqueue(decision, body.sql, body.actor)
             yield _sse("held", {"approval_id": approval_id})
         else:
-            state.metrics["blocks_total"] += 1
             yield _sse("blocked", {"reason": result["reason"]})
 
     return StreamingResponse(events(), media_type="text/event-stream")
@@ -291,7 +286,7 @@ def decide_approval(approval_id: str, body: ApprovalDecisionRequest, request: Re
     try:
         if body.decision == "approve":
             result = state.approval_queue.approve(approval_id, body.approver, state.connection.write_executor, state.audit_log)
-            state.metrics["approvals_total"] += 1
+            state.gateway_metrics.record_approval()
             return ApprovalDecisionResponse(
                 id=approval_id,
                 status="approved",
@@ -301,7 +296,7 @@ def decide_approval(approval_id: str, body: ApprovalDecisionRequest, request: Re
                 error=redact_text(result.error) if result.error else None,
             )
         record = state.approval_queue.reject(approval_id, body.approver, state.audit_log)
-        state.metrics["rejections_total"] += 1
+        state.gateway_metrics.record_rejection()
         return ApprovalDecisionResponse(id=approval_id, status=record.status, approver=body.approver)
     except ApprovalError as exc:
         logger.warning("gateway_api.approval_failsafe", approval_id=approval_id, decision=body.decision, error=str(exc))
@@ -387,19 +382,17 @@ def metrics(request: Request) -> Response:
     """Prometheus text-exposition-format counters: queries, blocks, holds, approvals,
     rejections, and rate-limited requests since this app instance started.
 
-    P2.17 (`.devdocs/PHASE2_GATES.md`): every line here is one of the fixed,
-    already-known `_METRIC_KEYS` — a bare counter name and an integer value, no
-    Prometheus label set (`{...}`) of any kind. There is no code path from here to
-    `proposed_sql`, `actor`, or any other per-request value; only the aggregate `int`
-    counters on `request.app.state.metrics` are ever read. Do not add a labeled metric
-    (e.g. `icberg_queries_total{actor="..."}`) to this endpoint — that would reintroduce
-    exactly the high-cardinality/PII-in-labels leak this gate exists to prevent.
+    Backed by `request.app.state.gateway_metrics` (a `telemetry.GatewayMetrics`, one per
+    app instance — see `create_gateway_app`) via its `public_text()` method
+    (`prometheus_client.generate_latest()` under the hood — see that method's docstring
+    for the integer-formatting rewrite it applies). P2.17 (`.devdocs/PHASE2_GATES.md`):
+    every value line here is one of a fixed, already-known set of BUCKETED, UNLABELED
+    counters — no Prometheus label set (`{...}`) of any kind, and no code path from here
+    to `proposed_sql`, `actor`, or any other per-request value; only aggregate counters
+    are ever read. Do not add a labeled metric (e.g. `icberg_queries_total{actor="..."}`)
+    to this endpoint — that would reintroduce exactly the high-cardinality/PII-in-labels
+    leak this route exists to prevent. (The richer, labeled/histogram instrumentation
+    `telemetry.py` also tracks — see `GatewayMetrics.registry` — is deliberately NEVER
+    exposed here; see that class's docstring.)
     """
-    m: dict[str, int] = request.app.state.metrics
-    lines: list[str] = []
-    for key in _METRIC_KEYS:
-        name = f"icberg_{key}"
-        lines.append(f"# HELP {name} Total count of {key.replace('_', ' ')}.")
-        lines.append(f"# TYPE {name} counter")
-        lines.append(f"{name} {m[key]}")
-    return Response(content="\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
+    return Response(content=request.app.state.gateway_metrics.public_text(), media_type="text/plain; version=0.0.4")

@@ -32,6 +32,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from backend.api.gateway_routes import router as gateway_router
+from backend.core import telemetry
 from backend.core.approvals import DEFAULT_TTL_SECONDS, ApprovalQueue
 from backend.core.audit import AuditLog
 from backend.core.connectors import connector_for
@@ -106,21 +107,21 @@ def create_gateway_app(
         version="0.2.0",
     )
 
+    # A fresh, fully isolated `GatewayMetrics` bundle per app instance — never the
+    # module-level `telemetry.DEFAULT_METRICS` — so two governed-database apps (or two
+    # instances a test builds in the same pytest process, as `tests/api
+    # /test_gateway_api.py` routinely does) never share `/metrics` counts. See
+    # `telemetry.new_metrics_registry`'s docstring.
+    gateway_metrics = telemetry.new_metrics_registry()
+
     app.state.connection = connection
     app.state.gate = gate
-    app.state.gateway = Gateway(gate)
+    app.state.gateway = Gateway(gate, metrics=gateway_metrics)
     app.state.audit_log = audit_log
     app.state.approval_queue = approval_queue
     app.state.rate_buckets = defaultdict(list)
     app.state.rate_limit_per_minute = rate_limit_per_minute
-    app.state.metrics = {
-        "queries_total": 0,
-        "blocks_total": 0,
-        "holds_total": 0,
-        "approvals_total": 0,
-        "rejections_total": 0,
-        "rate_limited_total": 0,
-    }
+    app.state.gateway_metrics = gateway_metrics
 
     app.include_router(gateway_router)
 
