@@ -26,21 +26,21 @@ class TestLLMAdapterInit:
 
     def test_round_robin_selection(self, adapter):
         from langchain_cerebras import ChatCerebras
-        from langchain_groq import ChatGroq
         from langchain_core.runnables import RunnableWithFallbacks
-        
+        from langchain_groq import ChatGroq
+
         # Call 1
         model1 = adapter.get_chat_model()
         assert isinstance(model1, RunnableWithFallbacks)
-        
+
         # Call 2
         model2 = adapter.get_chat_model()
         assert isinstance(model2, RunnableWithFallbacks)
-        
+
         # Check that they alternated between Cerebras and Groq
         types = {type(model1.runnable), type(model2.runnable)}
         assert types == {ChatCerebras, ChatGroq}
-        
+
         # Check max tokens is configured correctly for both
         assert model1.runnable.max_tokens == 2048
         assert model2.runnable.max_tokens == 2048

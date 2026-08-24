@@ -21,9 +21,9 @@ was obtained (via `trace.get_tracer`) long before this module ever ran.
 
 from __future__ import annotations
 
+import sqlite3
 import subprocess
 import sys
-import sqlite3
 import textwrap
 
 import pytest

@@ -906,7 +906,10 @@ class GovernanceGate:
                 return PolicyDecision(
                     action="block",
                     classification=classification,
-                    reason="MERGE statements are always blocked: matched-row actions cannot be bounded like a WHERE clause.",
+                    reason=(
+                        "MERGE statements are always blocked: matched-row actions cannot be bounded "
+                        "like a WHERE clause."
+                    ),
                     matched_rules=matched_rules,
                     tables=tables,
                 )
@@ -950,7 +953,10 @@ class GovernanceGate:
                     return PolicyDecision(
                         action="block",
                         classification=classification,
-                        reason="INSERT without an explicit column list writes every column of the target table; blocked.",
+                        reason=(
+                            "INSERT without an explicit column list writes every column of the target "
+                            "table; blocked."
+                        ),
                         matched_rules=matched_rules,
                         tables=tables,
                     )

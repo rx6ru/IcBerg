@@ -285,7 +285,9 @@ def decide_approval(approval_id: str, body: ApprovalDecisionRequest, request: Re
     state = request.app.state
     try:
         if body.decision == "approve":
-            result = state.approval_queue.approve(approval_id, body.approver, state.connection.write_executor, state.audit_log)
+            result = state.approval_queue.approve(
+                approval_id, body.approver, state.connection.write_executor, state.audit_log
+            )
             state.gateway_metrics.record_approval()
             return ApprovalDecisionResponse(
                 id=approval_id,

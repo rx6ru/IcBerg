@@ -5,7 +5,7 @@ name: CI
 # red-team/PII/approval-workflow suites (tests/security, tests/api, tests/integration)
 # followed by the full test suite, and is the required, blocking check — a regression in
 # SQL-governance policy, PII redaction, or the approval workflow must fail CI, not just
-# get logged. Lint (ruff) runs with continue-on-error: true — see that job for why.
+# get logged. Lint (ruff, line-length 120) is also a required, blocking check.
 #
 # `enable-cache: false` on setup-uv: uv's cache normally keys off uv.lock, but uv.lock
 # is gitignored in this repo, which made astral-sh/setup-uv fail at setup with "No file
@@ -23,14 +23,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Lint is advisory, not blocking: `ruff check .` currently reports ~236 pre-existing
-  # issues (mostly E501 line-length in tests/security's long, descriptive test names)
-  # that predate this workflow fix and are out of scope to mass-fix here. security-gate
-  # below is the required, blocking check — see the file header.
+  # Lint: `ruff check .` (line-length 120, configured in pyproject.toml). Blocking.
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4

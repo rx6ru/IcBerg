@@ -26,7 +26,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.agent.agent import DEFAULT_DEMO_DB_PATH, bind_governed_tools, create_agent  # noqa: E402
+from backend.agent.agent import (  # noqa: E402
+    DEFAULT_DEMO_DB_PATH,
+    bind_governed_tools,
+    create_agent,
+)
 from backend.agent.tools import submit_sql  # noqa: E402
 from backend.core.llm_adapter import LLMAdapter  # noqa: E402
 from backend.integrations.langgraph_tool import GovernedSQLTool  # noqa: E402
