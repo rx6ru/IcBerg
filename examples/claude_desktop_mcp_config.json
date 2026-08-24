@@ -1,0 +1,15 @@
+{
+  "_comment": "Example Claude Desktop MCP client config for the IcBerg governance gateway. Copy the 'icberg' entry below into Claude Desktop's claude_desktop_config.json 'mcpServers' object (Settings -> Developer -> Edit Config). Claude gets governed query/list_pending_approvals/audit_tail tools instead of raw database credentials -- no agent-callable approve tool; approval of a held write is granted out-of-band (authenticated REST call / human UI), never by the connected agent itself -- see backend/mcp_server.py and .devdocs/PHASE3_GATES.md P3.3/P3.7.",
+  "mcpServers": {
+    "icberg": {
+      "command": "/absolute/path/to/IcBerg/.venv/bin/python",
+      "args": ["-m", "backend.mcp_server"],
+      "cwd": "/absolute/path/to/IcBerg",
+      "env": {
+        "ICBERG_MCP_DSN": "/absolute/path/to/your/app.db",
+        "ICBERG_MCP_POLICY": "/absolute/path/to/IcBerg/examples/policy.yaml",
+        "ICBERG_MCP_ACTOR": "claude-desktop"
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+# Example IcBerg policy — load with `backend.core.policy.load_policy("policy.yaml")`,
+# or pass this path straight to `icberg.govern(..., policy=...)`,
+# `icberg.governed_connection(dsn, policy=...)`, `backend.mcp_server.create_mcp_server`,
+# or `backend.integrations.langgraph_tool.GovernedSQLTool(dsn, policy=...)`.
+#
+# A policy can only further-restrict IcBerg's hardcoded safety rules -- it can never
+# loosen them. A DROP TABLE, an unbounded DELETE, an injection pattern, etc. stay
+# blocked no matter what this file says. See backend/core/policy.py.
+
+# Only these tables may be referenced at all; anything else is blocked outright.
+allowed_tables:
+  - users
+  - orders
+
+# Always blocked, even if it were also in allowed_tables above.
+denied_tables:
+  - internal_audit_log
+
+# Every result is capped at 25 rows, even though the engine's own default cap is 1000.
+max_rows: 25
+
+# Force human approval on every write this policy sees (defense-in-depth on top of the
+# base gate, which already holds every write for approval or blocks it outright).
+require_approval_for_writes: true
+
+# Extra column-name keywords treated as PII, on top of redaction.py's built-in list
+# (email/ssn/phone/card/dob/address/...).
+pii_columns:
+  - internal_notes
