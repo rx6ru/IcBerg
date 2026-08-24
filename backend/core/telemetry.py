@@ -40,7 +40,13 @@ from typing import Any, Iterator
 
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode
-from prometheus_client import CollectorRegistry, Counter, Histogram, disable_created_metrics, generate_latest
+from prometheus_client import (
+    CollectorRegistry,
+    Counter,
+    Histogram,
+    disable_created_metrics,
+    generate_latest,
+)
 
 # `_created` gauge lines (a `Counter`/`Histogram`'s own creation timestamp, emitted by
 # `prometheus_client` by default) carry a wall-clock epoch float with nothing left to

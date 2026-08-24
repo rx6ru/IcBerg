@@ -367,7 +367,9 @@ class MySQLReadOnlyExecutor:
                 )
         except Exception as exc:
             latency_ms = int((time.monotonic() - start) * 1000)
-            return ExecutionResult(rows=[], columns=[], rowcount=0, truncated=False, latency_ms=latency_ms, error=str(exc))
+            return ExecutionResult(
+                rows=[], columns=[], rowcount=0, truncated=False, latency_ms=latency_ms, error=str(exc)
+            )
         finally:
             conn.close()
 

@@ -20,7 +20,8 @@ import pytest
 from backend.agent.agent import bind_governed_tools
 from backend.agent.tools import get_sql_tool, submit_sql
 from backend.integrations.langgraph_tool import GovernedSQLTool
-from scripts.seed_demo_db import PASSENGERS, USERS, seed as seed_demo_db
+from scripts.seed_demo_db import PASSENGERS, USERS
+from scripts.seed_demo_db import seed as seed_demo_db
 
 _RAW_EXECUTOR_ATTRS = {"read_executor", "write_executor", "connection", "conn", "executor"}
 

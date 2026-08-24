@@ -584,13 +584,19 @@ class TestConnector:
         result = conn.read_executor.execute("SELECT 1")
         assert result.error is not None
 
-    @pytest.mark.skipif(not os.environ.get("ICBERG_TEST_PG_DSN"), reason="set ICBERG_TEST_PG_DSN to run a live Postgres connector test")
+    @pytest.mark.skipif(
+        not os.environ.get("ICBERG_TEST_PG_DSN"),
+        reason="set ICBERG_TEST_PG_DSN to run a live Postgres connector test",
+    )
     def test_connector_postgres_live_roundtrip(self):
         conn = connector_for(os.environ["ICBERG_TEST_PG_DSN"])
         result = conn.read_executor.execute("SELECT 1")
         assert result.error is None
 
-    @pytest.mark.skipif(not os.environ.get("ICBERG_TEST_MYSQL_DSN"), reason="set ICBERG_TEST_MYSQL_DSN to run a live MySQL connector test")
+    @pytest.mark.skipif(
+        not os.environ.get("ICBERG_TEST_MYSQL_DSN"),
+        reason="set ICBERG_TEST_MYSQL_DSN to run a live MySQL connector test",
+    )
     def test_connector_mysql_live_roundtrip(self):
         conn = connector_for(os.environ["ICBERG_TEST_MYSQL_DSN"])
         result = conn.read_executor.execute("SELECT 1")

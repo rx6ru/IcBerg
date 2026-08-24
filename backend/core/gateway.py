@@ -79,7 +79,9 @@ class Gateway:
             isolation that the shared default must not provide.
     """
 
-    def __init__(self, gate: GovernanceGate | None = None, *, metrics: "telemetry.GatewayMetrics | None" = None) -> None:
+    def __init__(
+        self, gate: GovernanceGate | None = None, *, metrics: "telemetry.GatewayMetrics | None" = None
+    ) -> None:
         self._gate = gate or GovernanceGate()
         self._metrics = metrics or telemetry.DEFAULT_METRICS
 
