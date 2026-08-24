@@ -3,7 +3,7 @@ requires = ["setuptools>=75.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["backend*", "frontend*", "icberg*"]
+include = ["backend*", "icberg*"]
 
 [project]
 name = "icberg"
@@ -27,16 +27,8 @@ dependencies = [
     # LLM Providers (LangChain integrations)
     "langchain-cerebras>=0.8.0",
     "langchain-groq>=1.1.0",
-    "langchain-google-genai>=4.2.0",
 
-    # Embeddings (direct SDK)
-    "google-genai>=1.65.0",
-
-    # Vector DB
-    "qdrant-client>=1.17.0",
-
-    # Database
-    "sqlalchemy>=2.0.40",
+    # SQL parsing/rewriting for the governance gate
     "sqlglot>=25.0.0",
 
     # Phase 3 integration surfaces: MCP server + policy YAML (langchain-core is already
@@ -54,14 +46,6 @@ dependencies = [
     "opentelemetry-sdk>=1.27.0",
     "prometheus-client>=0.21.0",
 
-    # Data Science
-    "pandas>=2.2.0",
-    "matplotlib>=3.9.0",
-    "seaborn>=0.13.0",
-    "numpy>=1.26.0",
-
-    # Frontend (separate process, but same venv for simplicity)
-    "streamlit>=1.54.0",
     "requests>=2.32.0",
 ]
 

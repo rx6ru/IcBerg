@@ -1,3 +1,0 @@
-# Frontend dependencies for Docker image
-streamlit>=1.54.0
-requests>=2.32.0
